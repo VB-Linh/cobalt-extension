@@ -131,13 +131,45 @@ export function extractMediaFingerprint(videoElement) {
     }
   }
 
-  // 4. Ancestor container data-media-id
+  // 4. Ancestor container data-media-id (strictly only if container dedicated to exactly 1 video)
   const ancestorWithMediaId = videoElement.closest?.('[data-media-id]');
-  if (ancestorWithMediaId) {
+  if (ancestorWithMediaId && (!ancestorWithMediaId.querySelectorAll || ancestorWithMediaId.querySelectorAll('video').length === 1)) {
     const ancestorId = ancestorWithMediaId.getAttribute('data-media-id');
     if (ancestorId && ancestorId.trim()) {
       return ancestorId.trim();
     }
+  }
+
+  // 5. Preview image or thumbnail element/background inside dedicated video wrapper/cell
+  const boundary = videoElement.closest?.('[data-testid="quoteTweet"], [data-testid="tweetQuote"], article[data-testid="tweet"]') || document.body;
+  let current = videoElement.parentElement;
+  while (current && current !== boundary && current !== document.body) {
+    if (typeof current.querySelectorAll === 'function' && current.querySelectorAll('video').length === 1) {
+      // 5a. Dedicated <img> tag
+      const previewImg = current.querySelector?.('img[src*="media"], img[src*="thumb"], img[src*="amplify_video"], img[src*="ext_tw_video"]');
+      if (previewImg) {
+        const imgSrc = previewImg.getAttribute?.('src') || previewImg.src;
+        if (imgSrc && typeof imgSrc === 'string') {
+          const thumbMatch = imgSrc.match(/(?:amplify_video_thumb|ext_tw_video_thumb|tweet_video_thumb|media)\/([a-zA-Z0-9_-]+)/i);
+          if (thumbMatch && thumbMatch[1]) {
+            return thumbMatch[1];
+          }
+        }
+      }
+
+      // 5b. CSS background-image
+      const bgEls = current.querySelectorAll?.('[style*="background"], [style*="url("]');
+      if (bgEls) {
+        for (let b = 0; b < bgEls.length; b++) {
+          const bgStyle = bgEls[b].getAttribute?.('style') || bgEls[b].style?.backgroundImage || '';
+          const bgMatch = bgStyle.match(/(?:amplify_video_thumb|ext_tw_video_thumb|tweet_video_thumb|media)\/([a-zA-Z0-9_-]+)/i);
+          if (bgMatch && bgMatch[1]) {
+            return bgMatch[1];
+          }
+        }
+      }
+    }
+    current = current.parentElement;
   }
 
   return null;

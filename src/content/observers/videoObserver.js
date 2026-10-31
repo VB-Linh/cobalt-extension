@@ -138,7 +138,7 @@ export function createVideoObserver(options = {}) {
     // 7. Fire notification callback
     if (typeof onVideoDetected === 'function') {
       try {
-        onVideoDetected(video, info);
+        onVideoDetected(video, { ...info, videoKey });
       } catch (err) {
         console.error('[X Video Tools] Error in onVideoDetected callback:', err);
       }

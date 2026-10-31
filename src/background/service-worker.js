@@ -5,7 +5,7 @@ import { extractOriginPattern } from '../shared/utils/urlHelper.js';
 import { fetchTweetSyndication } from './handlers/syndicationHandler.js';
 import { handleOpenTab } from './handlers/tabOpener.js';
 import { requestCobalt, checkServerHealth } from './clients/cobaltClient.js';
-import { handleCobaltResponse, classifyCobaltError } from './handlers/cobaltResponseHandler.js';
+import { handleCobaltResponse, classifyCobaltError, matchPickerItem } from './handlers/cobaltResponseHandler.js';
 import { initiateDownload } from './downloads/downloadManager.js';
 import { requestSession } from './clients/sessionClient.js';
 import { saveSessionToken, getSessionToken, clearSessionToken, getSessionStatus } from './auth/jwtManager.js';
@@ -143,7 +143,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     action === 'XVT_COBALT_DOWNLOAD'
   ) {
     const payload = message.payload || message;
-    const { tweetId, permalink, username, videoKey, correlationId = `req_${Date.now()}`, selectedUrl } = payload;
+    const { tweetId, permalink, username, videoKey, correlationId = `req_${Date.now()}`, selectedUrl, mediaIndex, mediaFingerprint } = payload;
     const tabId = sender.tab?.id;
 
     (async () => {
@@ -238,8 +238,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return sendResponse(handled);
         }
 
-        // Multi-media picker required
+        // Multi-media picker response: resolve deterministically for this specific video element
         if (handled.type === 'PICKER') {
+          const matchedItem = matchPickerItem(handled.items, { mediaIndex, mediaFingerprint });
+          if (matchedItem && matchedItem.url) {
+            const downloadRes = await initiateDownload(videoKey, {
+              url: matchedItem.url,
+              tweetId,
+              username,
+              correlationId,
+              tabId,
+            });
+            return sendResponse(downloadRes);
+          }
+
           return sendResponse({
             success: true,
             status: 'picker',

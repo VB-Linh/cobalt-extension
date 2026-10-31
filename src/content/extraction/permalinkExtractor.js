@@ -44,10 +44,33 @@ export function extractTweetInfo(tweetContainer, videoElement) {
   result.mediaFingerprint = extractMediaFingerprint(videoElement);
 
   // 1. Detect official media index from immediate wrapping or adjacent anchor
-  // Look up to 3 levels up or closest anchor for an official media index
   let surroundingAnchor = (typeof videoElement.closest === 'function')
     ? videoElement.closest('a[href*="/status/"], a[href*="/statuses/"]')
     : null;
+
+  if (!surroundingAnchor && typeof videoElement.closest === 'function') {
+    // Check dedicated cell or container containing only this video element
+    const boundary = videoElement.closest?.('[data-testid="quoteTweet"], [data-testid="tweetQuote"], article[data-testid="tweet"]') || document.body;
+    let current = videoElement.parentElement;
+    while (current && current !== boundary && current !== document.body) {
+      if (current.querySelectorAll('video').length === 1) {
+        // Only search for /video/ anchors to avoid leaking photo anchors from sibling photo cells
+        const mediaAnchor = current.querySelector?.('a[href*="/video/"]');
+        if (mediaAnchor) {
+          surroundingAnchor = mediaAnchor;
+          break;
+        }
+      }
+      current = current.parentElement;
+    }
+
+    if (!surroundingAnchor) {
+      const wrapper = videoElement.closest('[data-testid="videoComponent"], [data-testid="videoPlayer"]') || videoElement.parentElement;
+      if (wrapper && wrapper.querySelectorAll('video').length === 1) {
+        surroundingAnchor = wrapper.querySelector?.('a[href*="/video/"]');
+      }
+    }
+  }
 
   if (surroundingAnchor) {
     const href = surroundingAnchor.getAttribute('href') || surroundingAnchor.href || '';

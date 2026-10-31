@@ -1,9 +1,10 @@
 // src/content/toolbar/index.js
-import { createToolbar, shouldFallbackInside } from './toolbar.js';
+import { createToolbar, shouldFallbackInside, resolveVideoWrapper } from './toolbar.js';
 import { TOOLBAR_STATES } from './toolbarState.js';
 import { videoStateStore as defaultStateStore, getVideoKey } from '../state/videoState.js';
+import { extractMediaFingerprint } from '../detection/videoDetector.js';
 
-export { createToolbar, shouldFallbackInside, TOOLBAR_STATES };
+export { createToolbar, shouldFallbackInside, resolveVideoWrapper, TOOLBAR_STATES };
 
 /**
  * WeakMap registry tracking live toolbar controllers per video element.
@@ -22,17 +23,19 @@ const toolbarRegistry = new WeakMap();
  * @returns {object | null} Toolbar controller or null if dismissed/already attached
  */
 export function attachToolbar(videoElement, tweetInfo = {}, options = {}) {
-  if (!videoElement || videoElement.nodeType !== 1) {
+  if (!videoElement || videoElement.nodeType !== 1 || videoElement.tagName !== 'VIDEO') {
     return null;
   }
 
   const stateStore = options.stateStore || defaultStateStore;
 
-  // 1. Resolve canonical video key
+  // 1. Resolve canonical video key (guaranteeing non-null key for element tracking)
   const videoKey =
     tweetInfo.videoKey ||
-    videoElement.dataset.xvtVideoKey ||
-    (tweetInfo.tweetId ? getVideoKey(tweetInfo.tweetId, tweetInfo.mediaIndex, tweetInfo.mediaFingerprint || videoElement) : null);
+    videoElement.dataset?.xvtVideoKey ||
+    (tweetInfo.tweetId
+      ? getVideoKey(tweetInfo.tweetId, tweetInfo.mediaIndex, tweetInfo.mediaFingerprint || videoElement)
+      : getVideoKey('tweet', tweetInfo.mediaIndex, tweetInfo.mediaFingerprint || videoElement));
 
   // 2. Guard against mounting on dismissed videos
   if (stateStore.isDismissed(videoKey, videoElement)) {
@@ -44,15 +47,43 @@ export function attachToolbar(videoElement, tweetInfo = {}, options = {}) {
     return toolbarRegistry.get(videoElement);
   }
 
-  // 4. DOM guard: Check if wrapper already contains an active toolbar host
-  const videoComponent = videoElement.closest('[data-testid="videoComponent"]');
-  const videoPlayer = videoElement.closest('[data-testid="videoPlayer"]');
-  const wrapper = videoComponent || videoPlayer || videoElement.parentElement;
-
+  // 4. DOM guard: Check if wrapper already contains an active toolbar host for this video
+  const wrapper = resolveVideoWrapper(videoElement);
   if (wrapper) {
-    const existingHost = wrapper.querySelector('.xvt-toolbar-host');
-    if (existingHost) {
-      return null;
+    const existingHosts = wrapper.querySelectorAll('.xvt-toolbar-host');
+    for (let i = 0; i < existingHosts.length; i++) {
+      const hostEl = existingHosts[i];
+      const existingKey = hostEl.getAttribute('data-xvt-video-key');
+
+      // If existing host belongs to a different tweet
+      if (tweetInfo.tweetId && existingKey && !existingKey.startsWith(tweetInfo.tweetId)) {
+        // If there is another video in the wrapper that owns this host, reject mounting cross-tweet video in same wrapper
+        const ownerVideo = Array.from(wrapper.querySelectorAll('video')).find(
+          (v) => v !== videoElement && (v.dataset?.xvtVideoKey === existingKey || !v.dataset?.xvtVideoKey)
+        );
+        if (ownerVideo) {
+          return null;
+        }
+        // Otherwise, it is a dead orphan host left from a recycled wrapper with no owning video -> clean it up!
+        hostEl.remove();
+        continue;
+      }
+
+      // If wrapper has only 1 video
+      if (wrapper.querySelectorAll('video').length === 1) {
+        // If this host belongs to THIS specific videoKey, return existing or avoid duplicate
+        if (existingKey === videoKey) {
+          return toolbarRegistry.get(videoElement) || null;
+        }
+        // Stale host with a different key inside single-video wrapper -> clean it up
+        hostEl.remove();
+        continue;
+      }
+
+      // If wrapper has multiple videos, reject if host for THIS specific videoKey already exists
+      if (videoKey && existingKey === videoKey) {
+        return toolbarRegistry.get(videoElement) || null;
+      }
     }
   }
 
@@ -99,11 +130,16 @@ export function detachToolbar(videoElement) {
   if (!videoElement) return false;
   const controller = toolbarRegistry.get(videoElement);
   if (!controller) {
-    // If not in registry, still check if there is an orphan host attached to wrapper
-    const videoComponent = videoElement.closest('[data-testid="videoComponent"]');
-    const videoPlayer = videoElement.closest('[data-testid="videoPlayer"]');
-    const wrapper = videoComponent || videoPlayer || videoElement.parentElement;
-    const orphanHost = wrapper?.querySelector('.xvt-toolbar-host');
+    // If not in registry, still check if there is an orphan host attached to wrapper for this video
+    const wrapper = resolveVideoWrapper(videoElement);
+    const videoKey = videoElement.dataset?.xvtVideoKey;
+    let orphanHost = null;
+    if (videoKey && wrapper) {
+      orphanHost = wrapper.querySelector(`.xvt-toolbar-host[data-xvt-video-key="${videoKey}"]`);
+    }
+    if (!orphanHost && wrapper?.querySelectorAll('video').length === 1) {
+      orphanHost = wrapper.querySelector('.xvt-toolbar-host');
+    }
     if (orphanHost && orphanHost.parentNode) {
       orphanHost.parentNode.removeChild(orphanHost);
       return true;

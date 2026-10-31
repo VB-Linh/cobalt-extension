@@ -1,9 +1,15 @@
 // src/content/toolbar/toolbarEvents.js
 import { TOOLBAR_STATES } from './toolbarState.js';
-import { resolveCdnForVideo } from '../cdn/cdnResolver.js';
+import { resolveCdnForVideo, CDN_ERROR_CODES } from '../cdn/cdnResolver.js';
 import { renderMediaPicker } from '../cdn/mediaPicker.js';
 import { isCobaltConfigured, getSettings } from '../../shared/utils/storage.js';
 import { getVideoKey } from '../state/videoState.js';
+import { extractMediaFingerprint } from '../detection/videoDetector.js';
+import { matchPickerItem } from '../../shared/utils/mediaMatcher.js';
+import { selectTargetMedia } from '../cdn/mediaSelector.js';
+
+import { extractMediaIndex } from '../extraction/urlNormalizer.js';
+import { resolveVideoWrapper } from './toolbar.js';
 
 export const GRACE_PERIOD_MS = 300;
 export const NOTICE_DURATION_MS = 2500;
@@ -35,6 +41,7 @@ export function setupToolbarEvents({
 }) {
   let isHoveringVideo = false;
   let isHoveringToolbar = false;
+  let isFocused = false;
   let hideTimer = null;
   let lastActionClickTime = 0;
   let trackedDownloadId = null;
@@ -54,7 +61,33 @@ export function setupToolbarEvents({
 
   const videoKey =
     tweetInfo.videoKey ||
+    video?.dataset?.xvtVideoKey ||
     (effectiveTweetId ? getVideoKey(effectiveTweetId, tweetInfo.mediaIndex, tweetInfo.mediaFingerprint || video) : null);
+
+  // Dynamically resolves mediaIndex at action time if initially absent
+  function getEffectiveMediaIndex() {
+    if (tweetInfo.mediaIndex !== undefined && tweetInfo.mediaIndex !== null) {
+      return tweetInfo.mediaIndex;
+    }
+    if (video && typeof video.closest === 'function') {
+      const surroundingAnchor = video.closest('a[href*="/status/"], a[href*="/statuses/"]');
+      if (surroundingAnchor) {
+        const href = surroundingAnchor.getAttribute('href') || surroundingAnchor.href;
+        const idx = extractMediaIndex(href);
+        if (idx) return idx;
+      }
+      const dedicatedCell = resolveVideoWrapper(video);
+      if (dedicatedCell) {
+        const anchor = dedicatedCell.querySelector?.('a[href*="/video/"]');
+        if (anchor) {
+          const href = anchor.getAttribute('href') || anchor.href;
+          const idx = extractMediaIndex(href);
+          if (idx) return idx;
+        }
+      }
+    }
+    return tweetInfo.mediaIndex;
+  }
 
   // Runtime message listener for background download lifecycle updates
   function handleDownloadStatusChanged(msg) {
@@ -123,6 +156,7 @@ export function setupToolbarEvents({
       if (
         !isHoveringVideo &&
         !isHoveringToolbar &&
+        !isFocused &&
         !stateManager.isDismissed() &&
         currentState !== TOOLBAR_STATES.AMBIGUOUS &&
         currentState !== TOOLBAR_STATES.PICKER &&
@@ -134,17 +168,124 @@ export function setupToolbarEvents({
     }, GRACE_PERIOD_MS);
   }
 
+  // Helper to verify event relates specifically to this video
+  function isEventForThisVideo(event) {
+    if (!event || !event.target) return true;
+    const target = event.target;
+
+    if (target === video || (typeof video.contains === 'function' && video.contains(target))) {
+      return true;
+    }
+    if (
+      target === host ||
+      (typeof host.contains === 'function' && host.contains(target)) ||
+      (host.shadowRoot && typeof host.shadowRoot.contains === 'function' && host.shadowRoot.contains(target))
+    ) {
+      return true;
+    }
+
+    // If wrapper contains only this video
+    if (wrapper && wrapper.querySelectorAll('video').length === 1) {
+      if (target === wrapper || (typeof wrapper.contains === 'function' && wrapper.contains(target))) {
+        return true;
+      }
+      return false;
+    }
+
+    // If wrapper contains multiple videos
+    if (wrapper && wrapper.querySelectorAll('video').length > 1) {
+      const otherVideos = wrapper.querySelectorAll('video');
+
+      for (let i = 0; i < otherVideos.length; i++) {
+        const otherV = otherVideos[i];
+        if (otherV === video) continue;
+
+        if (target === otherV || (typeof otherV.contains === 'function' && otherV.contains(target))) {
+          return false;
+        }
+
+        let cur = target;
+        while (cur && cur !== wrapper && cur !== document.body) {
+          if (cur.contains(otherV) && !cur.contains(video)) {
+            return false;
+          }
+          cur = cur.parentElement;
+        }
+      }
+
+      let cur = target;
+      while (cur && cur !== wrapper && cur !== document.body) {
+        if (cur.contains(video)) {
+          return true;
+        }
+        cur = cur.parentElement;
+      }
+
+      // Check if target is a sibling overlay or element associated with this video
+      if (target !== wrapper) {
+        // A. Class/id correlation check (e.g. overlay-1, cell-1)
+        const targetId = `${target.id || ''} ${target.className || ''}`;
+        const match = targetId.match(/[_-](\d+)\b/);
+        const effectiveIdx = getEffectiveMediaIndex();
+        if (match) {
+          const targetIndex = Number(match[1]);
+          if (effectiveIdx && targetIndex === Number(effectiveIdx)) {
+            return true;
+          }
+          if (effectiveIdx && targetIndex !== Number(effectiveIdx)) {
+            return false;
+          }
+        }
+
+        // B. Visual geometry / bounding box overlap
+        if (typeof target.getBoundingClientRect === 'function' && typeof video.getBoundingClientRect === 'function') {
+          try {
+            const tRect = target.getBoundingClientRect();
+            const vRect = video.getBoundingClientRect();
+            if (tRect.width > 0 && tRect.height > 0 && vRect.width > 0 && vRect.height > 0) {
+              const cx = tRect.left + tRect.width / 2;
+              const cy = tRect.top + tRect.height / 2;
+              if (cx >= vRect.left && cx <= vRect.right && cy >= vRect.top && cy <= vRect.bottom) {
+                return true;
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        // C. Direct following sibling (overlay placed immediately after video in DOM)
+        if (target.previousElementSibling === video) {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    return false;
+  }
+
   // --- Wrapper Mouse Listeners ---
-  function onWrapperMouseEnter() {
+  function onWrapperMouseEnter(event) {
     if (stateManager.isDismissed()) return;
+    if (!isEventForThisVideo(event)) return;
     isHoveringVideo = true;
     cancelHideTimer();
     toolbarController.updatePosition?.();
     toolbarController.show();
   }
 
-  function onWrapperMouseMove() {
+  function onWrapperMouseMove(event) {
     if (stateManager.isDismissed()) return;
+    const forThis = isEventForThisVideo(event);
+    if (!forThis) {
+      if (isHoveringVideo) {
+        isHoveringVideo = false;
+        scheduleGracefulHide();
+      }
+      return;
+    }
     if (!isHoveringVideo) {
       isHoveringVideo = true;
       cancelHideTimer();
@@ -156,17 +297,32 @@ export function setupToolbarEvents({
   function onWrapperMouseLeave(event) {
     if (stateManager.isDismissed()) return;
 
-    // Check if moving directly into host
-    const relatedTarget = event.relatedTarget;
-    if (relatedTarget && (relatedTarget === host || host.contains(relatedTarget))) {
+    // Check if moving directly into host or into this video (including Shadow DOM boundary)
+    const relatedTarget = event?.relatedTarget;
+    if (
+      relatedTarget &&
+      (relatedTarget === host ||
+        (typeof host.contains === 'function' && host.contains(relatedTarget)) ||
+        (host.shadowRoot && typeof host.shadowRoot.contains === 'function' && host.shadowRoot.contains(relatedTarget)))
+    ) {
       return;
+    }
+    if (relatedTarget && (relatedTarget === video || (typeof video.contains === 'function' && video.contains(relatedTarget)))) {
+      return;
+    }
+
+    // If wrapper contains multiple videos, check if relatedTarget belongs to this video
+    if (wrapper && wrapper.querySelectorAll('video').length > 1 && relatedTarget) {
+      if (isEventForThisVideo({ target: relatedTarget })) {
+        return;
+      }
     }
 
     isHoveringVideo = false;
     scheduleGracefulHide();
   }
 
-  // --- Host Mouse Listeners ---
+  // --- Host Mouse & Focus Listeners ---
   function onHostMouseEnter() {
     if (stateManager.isDismissed()) return;
     isHoveringToolbar = true;
@@ -186,13 +342,49 @@ export function setupToolbarEvents({
   function onHostMouseLeave(event) {
     if (stateManager.isDismissed()) return;
 
-    // Check if moving directly back into wrapper
-    const relatedTarget = event.relatedTarget;
-    if (relatedTarget && (relatedTarget === wrapper || wrapper.contains(relatedTarget))) {
-      return;
+    // Check if moving directly back into wrapper or video (or within host shadowRoot)
+    const relatedTarget = event?.relatedTarget;
+    if (relatedTarget) {
+      if (
+        relatedTarget === host ||
+        (typeof host.contains === 'function' && host.contains(relatedTarget)) ||
+        (host.shadowRoot && typeof host.shadowRoot.contains === 'function' && host.shadowRoot.contains(relatedTarget))
+      ) {
+        return;
+      }
+      if (relatedTarget === video || (typeof video.contains === 'function' && video.contains(relatedTarget))) {
+        return;
+      }
+      if (relatedTarget === wrapper || (typeof wrapper.contains === 'function' && wrapper.contains(relatedTarget))) {
+        if (isEventForThisVideo({ target: relatedTarget })) {
+          return;
+        }
+      }
     }
 
     isHoveringToolbar = false;
+    scheduleGracefulHide();
+  }
+
+  function onHostFocusIn() {
+    if (stateManager.isDismissed()) return;
+    isFocused = true;
+    cancelHideTimer();
+    toolbarController.show();
+  }
+
+  function onHostFocusOut(event) {
+    if (stateManager.isDismissed()) return;
+    const relatedTarget = event?.relatedTarget;
+    if (
+      relatedTarget &&
+      (relatedTarget === host ||
+        (typeof host.contains === 'function' && host.contains(relatedTarget)) ||
+        (host.shadowRoot && typeof host.shadowRoot.contains === 'function' && host.shadowRoot.contains(relatedTarget)))
+    ) {
+      return;
+    }
+    isFocused = false;
     scheduleGracefulHide();
   }
 
@@ -250,12 +442,14 @@ export function setupToolbarEvents({
     // When configured, transition to PROCESSING and send COBALT_DOWNLOAD
     stateManager.setState(TOOLBAR_STATES.PROCESSING, { action: 'download' });
 
+    const effectiveIdx = getEffectiveMediaIndex();
     const correlationId = `${videoKey || effectiveTweetId || 'vid'}_${Date.now()}`;
     const basePayload = {
       tweetId: effectiveTweetId,
       permalink: effectivePermalink,
       username: tweetInfo.username,
-      mediaIndex: tweetInfo.mediaIndex,
+      mediaIndex: effectiveIdx,
+      mediaFingerprint: tweetInfo.mediaFingerprint || extractMediaFingerprint(video),
       videoKey,
       correlationId,
     };
@@ -266,9 +460,9 @@ export function setupToolbarEvents({
           action: 'COBALT_DOWNLOAD',
           payload: { ...basePayload, ...extraPayload },
         }, (res) => {
-          if (!res) {
+          if (chrome.runtime?.lastError || !res) {
             stateManager.setState(TOOLBAR_STATES.ERROR, { action: 'download' });
-            toolbarController.showNotice('Không nhận được phản hồi từ tiện ích.', NOTICE_DURATION_MS);
+            toolbarController.showNotice(chrome.runtime?.lastError?.message || 'Không nhận được phản hồi từ tiện ích.', NOTICE_DURATION_MS);
             setTimeout(() => {
               if (stateManager.getState() === TOOLBAR_STATES.ERROR) {
                 stateManager.setState(
@@ -281,8 +475,22 @@ export function setupToolbarEvents({
 
           // Handle Picker response
           if (res.status === 'picker' || res.type === 'PICKER') {
-            stateManager.setState(TOOLBAR_STATES.PICKER, { items: res.items || res.picker });
-            renderMediaPicker(toolbarController.shadowRoot, res.items || res.picker, {
+            const items = res.items || res.picker || [];
+            const curIdx = getEffectiveMediaIndex();
+            const matchedItem = matchPickerItem(items, {
+              mediaIndex: curIdx,
+              mediaFingerprint: tweetInfo.mediaFingerprint || extractMediaFingerprint(video),
+            });
+
+            if (matchedItem && matchedItem.url) {
+              stateManager.setState(TOOLBAR_STATES.PROCESSING, { action: 'download' });
+              sendDownloadRequest({ selectedUrl: matchedItem.url });
+              return;
+            }
+
+            // Fallback for unmatched ambiguous items
+            stateManager.setState(TOOLBAR_STATES.PICKER, { items });
+            renderMediaPicker(toolbarController.shadowRoot, items, {
               onSelect: (selectedMedia) => {
                 stateManager.setState(TOOLBAR_STATES.PROCESSING, { action: 'download' });
                 sendDownloadRequest({ selectedUrl: selectedMedia.url });
@@ -414,10 +622,28 @@ export function setupToolbarEvents({
       }
     }
 
+    const effectiveIdx = getEffectiveMediaIndex();
+    const effectiveInfo = { ...tweetInfo, mediaIndex: effectiveIdx };
+
     try {
-      const promiseOrResult = resolver(video, tweetInfo, {
+      const promiseOrResult = resolver(video, effectiveInfo, {
         shiftKey: isShiftClick,
         onAmbiguous: (candidates, resolveCallback) => {
+          // If this video can be matched deterministically, resolve it directly
+          const matchResult = selectTargetMedia(candidates, effectiveInfo, video);
+          if (matchResult.media) {
+            resolveCallback(matchResult.media)
+              .then(handleResult)
+              .catch((err) => {
+                handleResult({
+                  success: false,
+                  error: err?.message || 'Lỗi xử lý video',
+                });
+              });
+            return;
+          }
+
+          // Otherwise, enter AMBIGUOUS state and render picker popover
           stateManager.setState(TOOLBAR_STATES.AMBIGUOUS, { candidates });
           renderMediaPicker(toolbarController.shadowRoot, candidates, {
             onSelect: async (selectedMedia, idx) => {
@@ -495,9 +721,9 @@ export function setupToolbarEvents({
     wrapper.addEventListener('mouseleave', onWrapperMouseLeave);
   }
 
-  // Also bind to inner video and videoPlayer for reliable detection through Twitter overlay layers
+  // Also bind to inner video and dedicated videoPlayer for reliable detection through Twitter overlay layers
   const innerPlayer = video?.closest?.('[data-testid="videoPlayer"]');
-  if (innerPlayer && innerPlayer !== wrapper) {
+  if (innerPlayer && innerPlayer !== wrapper && (!innerPlayer.querySelectorAll || innerPlayer.querySelectorAll('video').length === 1)) {
     innerPlayer.addEventListener('mouseenter', onWrapperMouseEnter);
     innerPlayer.addEventListener('mousemove', onWrapperMouseMove);
   }
@@ -510,6 +736,8 @@ export function setupToolbarEvents({
     host.addEventListener('mouseenter', onHostMouseEnter);
     host.addEventListener('mousemove', onHostMouseMove);
     host.addEventListener('mouseleave', onHostMouseLeave);
+    host.addEventListener('focusin', onHostFocusIn);
+    host.addEventListener('focusout', onHostFocusOut);
     host.addEventListener('click', onHostClick);
     host.addEventListener('mousedown', onHostClick);
     host.addEventListener('mouseup', onHostClick);
@@ -573,7 +801,7 @@ export function setupToolbarEvents({
       wrapper.removeEventListener('mouseleave', onWrapperMouseLeave);
     }
 
-    if (innerPlayer && innerPlayer !== wrapper) {
+    if (innerPlayer && innerPlayer !== wrapper && (!innerPlayer.querySelectorAll || innerPlayer.querySelectorAll('video').length === 1)) {
       innerPlayer.removeEventListener('mouseenter', onWrapperMouseEnter);
       innerPlayer.removeEventListener('mousemove', onWrapperMouseMove);
     }
@@ -587,6 +815,8 @@ export function setupToolbarEvents({
       host.removeEventListener('mouseenter', onHostMouseEnter);
       host.removeEventListener('mousemove', onHostMouseMove);
       host.removeEventListener('mouseleave', onHostMouseLeave);
+      host.removeEventListener('focusin', onHostFocusIn);
+      host.removeEventListener('focusout', onHostFocusOut);
       host.removeEventListener('click', onHostClick);
       host.removeEventListener('mousedown', onHostClick);
       host.removeEventListener('mouseup', onHostClick);

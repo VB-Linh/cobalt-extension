@@ -1,5 +1,7 @@
 // src/background/handlers/cobaltResponseHandler.js
 
+export { matchPickerItem } from '../../shared/utils/mediaMatcher.js';
+
 export const COBALT_RESPONSE_TYPES = Object.freeze({
   REDIRECT: 'redirect',
   TUNNEL: 'tunnel',

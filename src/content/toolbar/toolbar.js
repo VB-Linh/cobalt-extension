@@ -28,6 +28,46 @@ export function shouldFallbackInside(wrapper, videoElement) {
 }
 
 /**
+ * Resolves the isolated wrapper container dedicated to a specific video element.
+ * If a shared container (e.g. videoComponent) contains multiple videos, this traverses
+ * down to find the closest wrapper dedicated exclusively to this single video.
+ * 
+ * @param {HTMLVideoElement} videoElement
+ * @returns {HTMLElement | null}
+ */
+export function resolveVideoWrapper(videoElement) {
+  if (!videoElement || typeof videoElement !== 'object') return null;
+
+  const quoteTweet = videoElement.closest?.('[data-testid="quoteTweet"], [data-testid="tweetQuote"]');
+  const tweetArticle = videoElement.closest?.('article[data-testid="tweet"], article');
+  const boundary = quoteTweet || tweetArticle || document.body;
+
+  const videoComponent = videoElement.closest?.('[data-testid="videoComponent"]');
+  const videoPlayer = videoElement.closest?.('[data-testid="videoPlayer"]');
+
+  // If videoComponent exists, is within boundary, and only contains this video element
+  if (videoComponent && (!quoteTweet || quoteTweet.contains(videoComponent)) && videoComponent.querySelectorAll('video').length === 1) {
+    return videoComponent;
+  }
+
+  // If videoPlayer exists, is within boundary, and only contains this video element
+  if (videoPlayer && (!quoteTweet || quoteTweet.contains(videoPlayer)) && videoPlayer.querySelectorAll('video').length === 1) {
+    return videoPlayer;
+  }
+
+  // If container contains multiple videos, walk up from videoElement to find the closest container with 1 video
+  let current = videoElement.parentElement;
+  while (current && current !== boundary && current !== document.body) {
+    if (current.querySelectorAll('video').length === 1) {
+      return current;
+    }
+    current = current.parentElement;
+  }
+
+  return videoComponent || videoPlayer || videoElement.parentElement || null;
+}
+
+/**
  * Creates and mounts a Floating Toolbar instance attached to a video wrapper.
  * 
  * @param {HTMLVideoElement} videoElement
@@ -39,10 +79,8 @@ export function shouldFallbackInside(wrapper, videoElement) {
 export function createToolbar(videoElement, tweetInfo = {}, options = {}) {
   const stateStore = options.stateStore || defaultStateStore;
 
-  // 1. Identify video wrapper container (prefer outermost videoComponent)
-  const videoComponent = videoElement.closest('[data-testid="videoComponent"]');
-  const videoPlayer = videoElement.closest('[data-testid="videoPlayer"]');
-  const wrapper = videoComponent || videoPlayer || videoElement.parentElement;
+  // 1. Identify isolated video wrapper container dedicated to this video
+  const wrapper = resolveVideoWrapper(videoElement);
 
   if (!wrapper) {
     console.warn('[X Video Tools] Cannot attach toolbar: no valid video wrapper found.');
@@ -78,10 +116,18 @@ export function createToolbar(videoElement, tweetInfo = {}, options = {}) {
     videoElement.dataset.xvtVideoKey ||
     (tweetInfo.tweetId ? getVideoKey(tweetInfo.tweetId, tweetInfo.mediaIndex, tweetInfo.mediaFingerprint || videoElement) : null);
 
+  if (videoKey && videoElement.dataset) {
+    videoElement.dataset.xvtVideoKey = videoKey;
+  }
+
   // 4. Create host container (Default: horizontal pill anchored top-left inside video)
   const host = document.createElement('div');
   host.className = 'xvt-toolbar-host';
   host.setAttribute('data-xvt-mounted', 'true');
+  if (videoKey) {
+    host.setAttribute('data-xvt-video-key', videoKey);
+    host.dataset.xvtVideoKey = videoKey;
+  }
   host.style.position = 'absolute';
   host.style.top = '10px';
   host.style.left = '10px';
@@ -91,8 +137,14 @@ export function createToolbar(videoElement, tweetInfo = {}, options = {}) {
    * Adjusts positioning to top-left corner of video.
    */
   function updatePosition() {
-    host.style.top = '10px';
-    host.style.left = '10px';
+    let topOffset = 10;
+    let leftOffset = 10;
+    if (wrapper.querySelectorAll('video').length > 1) {
+      topOffset = (videoElement.offsetTop || 0) + 10;
+      leftOffset = (videoElement.offsetLeft || 0) + 10;
+    }
+    host.style.top = `${topOffset}px`;
+    host.style.left = `${leftOffset}px`;
     host.style.right = 'auto';
     host.style.transform = 'none';
   }

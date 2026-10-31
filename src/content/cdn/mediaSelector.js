@@ -1,4 +1,5 @@
 // src/content/cdn/mediaSelector.js
+import { extractMediaFingerprint } from '../detection/videoDetector.js';
 
 /**
  * Checks if a media item from Twitter Syndication API is a playable video or animated GIF.
@@ -78,8 +79,9 @@ export function selectTargetMedia(mediaDetails, tweetInfo = {}, videoElement = n
 
   // --- Level 1: Official Anchor (/video/:index) ---
   const mediaIndex = tweetInfo.mediaIndex;
-  if (typeof mediaIndex === 'number' && mediaIndex > 0) {
-    const targetItem = mediaDetails[mediaIndex - 1];
+  const numIndex = Number(mediaIndex);
+  if (!isNaN(numIndex) && numIndex > 0) {
+    const targetItem = mediaDetails[numIndex - 1];
     if (targetItem && isVideoMedia(targetItem)) {
       return { media: targetItem, ambiguous: false, candidates: videoCandidates };
     }
@@ -88,10 +90,13 @@ export function selectTargetMedia(mediaDetails, tweetInfo = {}, videoElement = n
   // --- Level 2: Media Fingerprint Match ---
   let fingerprint = tweetInfo.mediaFingerprint;
   if (!fingerprint && videoElement) {
-    const poster = videoElement.getAttribute('poster') || videoElement.poster;
-    if (poster) {
-      const match = poster.match(/(?:thumb|media)\/([A-Za-z0-9_-]+)/);
-      if (match) fingerprint = match[1];
+    fingerprint = extractMediaFingerprint(videoElement);
+    if (!fingerprint) {
+      const poster = videoElement.getAttribute?.('poster') || videoElement.poster;
+      if (poster) {
+        const match = poster.match(/(?:thumb|media)\/([A-Za-z0-9_-]+)/);
+        if (match) fingerprint = match[1];
+      }
     }
   }
 
