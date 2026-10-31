@@ -24,54 +24,24 @@
   <script>
     let widgetId = null;
 
-    window.onloadTurnstileCallback = function() {
-      window.parent.postMessage({ type: 'TURNSTILE_READY' }, '*');
-    };
-
     window.addEventListener('message', function(event) {
       const data = event.data;
       if (!data) return;
 
       if (data.action === 'RENDER_TURNSTILE') {
-        const sitekey = data.sitekey;
-        if (!sitekey) return;
-
-        const container = document.getElementById('cf-container');
-        if (container) {
-          container.innerHTML = '';
-        }
-
-        if (window.turnstile) {
-          try {
-            widgetId = window.turnstile.render('#cf-container', {
-              sitekey: sitekey,
-              theme: 'dark',
-              callback: function(token) {
-                window.parent.postMessage({ type: 'TURNSTILE_SUCCESS', token: token }, '*');
-              },
-              'error-callback': function(errorCode) {
-                window.parent.postMessage({ type: 'TURNSTILE_ERROR', errorCode: errorCode }, '*');
-              },
-              'expired-callback': function() {
-                window.parent.postMessage({ type: 'TURNSTILE_EXPIRED' }, '*');
-              }
-            });
-          } catch (err) {
-            window.parent.postMessage({ type: 'TURNSTILE_ERROR', errorCode: err.message }, '*');
-          }
-        }
+        // Remote Cloudflare Turnstile script is removed to strictly comply with MV3 CSP.
+        // Notify parent that API Key authentication should be configured.
+        window.parent.postMessage({
+          type: 'TURNSTILE_ERROR',
+          errorCode: 'Cloudflare Turnstile không được hỗ trợ trong môi trường tiện ích MV3 (vi phạm CSP script ngoài). Vui lòng sử dụng API Key trong cài đặt.'
+        }, '*');
       }
 
-      if (data.action === 'RESET_TURNSTILE' && widgetId !== null && window.turnstile) {
-        try {
-          window.turnstile.reset(widgetId);
-        } catch {
-          // ignore
-        }
+      if (data.action === 'RESET_TURNSTILE') {
+        widgetId = null;
       }
     });
   </script>
-  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstileCallback" async defer></script>
 </head>
 <body>
   <div id="cf-container"></div>

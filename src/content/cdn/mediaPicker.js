@@ -273,6 +273,7 @@ export function renderMediaPicker(shadowRoot, candidates = [], { onSelect, onCan
 
     // Event listeners
     const selectHandler = (e) => {
+      if (e && e.button !== undefined && e.button !== 0) return;
       e.stopPropagation();
       e.preventDefault();
       destroy();
@@ -281,6 +282,7 @@ export function renderMediaPicker(shadowRoot, candidates = [], { onSelect, onCan
       }
     };
 
+    itemEl.addEventListener('pointerdown', selectHandler);
     itemEl.addEventListener('click', selectHandler);
     itemEl.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
@@ -333,6 +335,9 @@ export function renderMediaPicker(shadowRoot, candidates = [], { onSelect, onCan
     handleCancel(e);
   }
 
+  closeBtn.addEventListener('pointerdown', (e) => {
+    if (e.button === 0) handleCancel(e);
+  });
   closeBtn.addEventListener('click', handleCancel);
   document.addEventListener('keydown', onKeyDown);
 

@@ -7,6 +7,7 @@ import { getVideoKey } from '../state/videoState.js';
 import { extractMediaFingerprint } from '../detection/videoDetector.js';
 import { matchPickerItem } from '../../shared/utils/mediaMatcher.js';
 import { selectTargetMedia } from '../cdn/mediaSelector.js';
+import { formatErrorMessage } from '../../shared/utils/errorHelper.js';
 
 import { extractMediaIndex } from '../extraction/urlNormalizer.js';
 import { resolveVideoWrapper } from './toolbar.js';
@@ -45,6 +46,16 @@ export function setupToolbarEvents({
   let hideTimer = null;
   let lastActionClickTime = 0;
   let trackedDownloadId = null;
+  let activePicker = null;
+
+  const unsubscribeState = stateManager.subscribe((currentState) => {
+    if (currentState !== TOOLBAR_STATES.AMBIGUOUS && currentState !== TOOLBAR_STATES.PICKER) {
+      if (activePicker) {
+        activePicker.destroy();
+        activePicker = null;
+      }
+    }
+  });
 
   // Robust tweetId and permalink resolution with fallback to DOM attributes and URL
   const effectiveTweetId =
@@ -101,7 +112,14 @@ export function setupToolbarEvents({
       return;
     }
 
+    const curState = stateManager.getState();
+    // Only accept download terminal lifecycle changes if actively downloading or processing
+    if (curState !== TOOLBAR_STATES.DOWNLOADING && curState !== TOOLBAR_STATES.PROCESSING) {
+      return;
+    }
+
     if (msg.state === 'complete') {
+      trackedDownloadId = null;
       stateManager.setState(TOOLBAR_STATES.COMPLETED, { action: 'download', downloadId: msg.downloadId });
       toolbarController.showNotice('Đã tải xong video', NOTICE_DURATION_MS);
       setTimeout(() => {
@@ -113,6 +131,7 @@ export function setupToolbarEvents({
         }
       }, NOTICE_DURATION_MS);
     } else if (msg.state === 'cancelled') {
+      trackedDownloadId = null;
       stateManager.setState(TOOLBAR_STATES.CANCELLED, { action: 'download' });
       toolbarController.showNotice('Đã hủy tải xuống', NOTICE_DURATION_MS);
       setTimeout(() => {
@@ -123,8 +142,10 @@ export function setupToolbarEvents({
         }
       }, NOTICE_DURATION_MS);
     } else if (msg.state === 'interrupted') {
+      trackedDownloadId = null;
       stateManager.setState(TOOLBAR_STATES.INTERRUPTED, { action: 'download', error: msg.error });
-      toolbarController.showNotice(msg.message || 'Tải xuống bị gián đoạn', NOTICE_DURATION_MS);
+      const displayMsg = formatErrorMessage(msg.message || 'Tải xuống bị gián đoạn');
+      toolbarController.showNotice(displayMsg, NOTICE_DURATION_MS);
       setTimeout(() => {
         const cur = stateManager.getState();
         if (cur === TOOLBAR_STATES.INTERRUPTED || cur === TOOLBAR_STATES.ERROR) {
@@ -160,7 +181,8 @@ export function setupToolbarEvents({
         !stateManager.isDismissed() &&
         currentState !== TOOLBAR_STATES.AMBIGUOUS &&
         currentState !== TOOLBAR_STATES.PICKER &&
-        currentState !== TOOLBAR_STATES.DOWNLOADING
+        currentState !== TOOLBAR_STATES.DOWNLOADING &&
+        currentState !== TOOLBAR_STATES.PROCESSING
       ) {
         toolbarController.hide();
       }
@@ -286,7 +308,7 @@ export function setupToolbarEvents({
       }
       return;
     }
-    if (!isHoveringVideo) {
+    if (!isHoveringVideo || stateManager.getState() === TOOLBAR_STATES.IDLE) {
       isHoveringVideo = true;
       cancelHideTimer();
       toolbarController.updatePosition?.();
@@ -332,7 +354,7 @@ export function setupToolbarEvents({
 
   function onHostMouseMove() {
     if (stateManager.isDismissed()) return;
-    if (!isHoveringToolbar) {
+    if (!isHoveringToolbar || stateManager.getState() === TOOLBAR_STATES.IDLE) {
       isHoveringToolbar = true;
       cancelHideTimer();
       toolbarController.show();
@@ -395,8 +417,9 @@ export function setupToolbarEvents({
 
   // --- Button Listeners ---
   function handleDownloadClick(event) {
-    event.stopPropagation();
-    event.preventDefault();
+    if (event && event.button !== undefined && event.button !== 0) return;
+    event?.stopPropagation?.();
+    event?.preventDefault?.();
 
     if (stateManager.isDismissed()) return;
 
@@ -440,7 +463,10 @@ export function setupToolbarEvents({
     }
 
     // When configured, transition to PROCESSING and send COBALT_DOWNLOAD
-    stateManager.setState(TOOLBAR_STATES.PROCESSING, { action: 'download' });
+    const transitioned = stateManager.setState(TOOLBAR_STATES.PROCESSING, { action: 'download' });
+    if (!transitioned) {
+      return;
+    }
 
     const effectiveIdx = getEffectiveMediaIndex();
     const correlationId = `${videoKey || effectiveTweetId || 'vid'}_${Date.now()}`;
@@ -461,15 +487,18 @@ export function setupToolbarEvents({
           payload: { ...basePayload, ...extraPayload },
         }, (res) => {
           if (chrome.runtime?.lastError || !res) {
-            stateManager.setState(TOOLBAR_STATES.ERROR, { action: 'download' });
-            toolbarController.showNotice(chrome.runtime?.lastError?.message || 'Không nhận được phản hồi từ tiện ích.', NOTICE_DURATION_MS);
-            setTimeout(() => {
-              if (stateManager.getState() === TOOLBAR_STATES.ERROR) {
-                stateManager.setState(
-                  isHoveringVideo || isHoveringToolbar ? TOOLBAR_STATES.HOVERED : TOOLBAR_STATES.IDLE
-                );
-              }
-            }, NOTICE_DURATION_MS);
+            if (stateManager.getState() === TOOLBAR_STATES.PROCESSING) {
+              stateManager.setState(TOOLBAR_STATES.ERROR, { action: 'download' });
+              const errorMsg = formatErrorMessage(chrome.runtime?.lastError?.message || 'Không nhận được phản hồi từ tiện ích.');
+              toolbarController.showNotice(errorMsg, NOTICE_DURATION_MS);
+              setTimeout(() => {
+                if (stateManager.getState() === TOOLBAR_STATES.ERROR) {
+                  stateManager.setState(
+                    isHoveringVideo || isHoveringToolbar ? TOOLBAR_STATES.HOVERED : TOOLBAR_STATES.IDLE
+                  );
+                }
+              }, NOTICE_DURATION_MS);
+            }
             return;
           }
 
@@ -490,12 +519,18 @@ export function setupToolbarEvents({
 
             // Fallback for unmatched ambiguous items
             stateManager.setState(TOOLBAR_STATES.PICKER, { items });
-            renderMediaPicker(toolbarController.shadowRoot, items, {
+            if (activePicker) {
+              activePicker.destroy();
+              activePicker = null;
+            }
+            activePicker = renderMediaPicker(toolbarController.shadowRoot, items, {
               onSelect: (selectedMedia) => {
+                activePicker = null;
                 stateManager.setState(TOOLBAR_STATES.PROCESSING, { action: 'download' });
                 sendDownloadRequest({ selectedUrl: selectedMedia.url });
               },
               onCancel: () => {
+                activePicker = null;
                 stateManager.setState(
                   isHoveringVideo || isHoveringToolbar ? TOOLBAR_STATES.HOVERED : TOOLBAR_STATES.IDLE
                 );
@@ -507,45 +542,54 @@ export function setupToolbarEvents({
           // Handle success download initiation: transition to DOWNLOADING and await lifecycle sync
           if (res.success) {
             trackedDownloadId = res.downloadId;
-            stateManager.setState(TOOLBAR_STATES.DOWNLOADING, { action: 'download', downloadId: res.downloadId });
-            toolbarController.showNotice('Đang tải video...', NOTICE_DURATION_MS);
+            if (stateManager.getState() === TOOLBAR_STATES.PROCESSING) {
+              stateManager.setState(TOOLBAR_STATES.DOWNLOADING, { action: 'download', downloadId: res.downloadId });
+              toolbarController.showNotice('Đang tải video...', NOTICE_DURATION_MS);
+            }
           } else {
             // Error handling
-            if (res.error === 'UNCONFIGURED') {
-              const msg = res.message || 'Chưa cài đặt Cobalt URL. Bấm vào icon tiện ích để thiết lập.';
-              toolbarController.showNotice(msg, NOTICE_DURATION_MS);
-              stateManager.setState(TOOLBAR_STATES.UNCONFIGURED, { message: msg });
-              setTimeout(() => {
-                if (stateManager.getState() === TOOLBAR_STATES.UNCONFIGURED) {
-                  stateManager.setState(
-                    isHoveringVideo || isHoveringToolbar ? TOOLBAR_STATES.HOVERED : TOOLBAR_STATES.IDLE
-                  );
-                }
-              }, NOTICE_DURATION_MS);
-            } else {
-              stateManager.setState(TOOLBAR_STATES.ERROR, { action: 'download', error: res.error });
-              toolbarController.showNotice(res.message || 'Lỗi khi tải video', NOTICE_DURATION_MS);
+            if (stateManager.getState() === TOOLBAR_STATES.PROCESSING) {
+              if (res.error === 'UNCONFIGURED') {
+                const msg = formatErrorMessage(res.message || 'Chưa cài đặt Cobalt URL. Bấm vào icon tiện ích để thiết lập.');
+                toolbarController.showNotice(msg, NOTICE_DURATION_MS);
+                stateManager.setState(TOOLBAR_STATES.UNCONFIGURED, { message: msg });
+                setTimeout(() => {
+                  if (stateManager.getState() === TOOLBAR_STATES.UNCONFIGURED) {
+                    stateManager.setState(
+                      isHoveringVideo || isHoveringToolbar ? TOOLBAR_STATES.HOVERED : TOOLBAR_STATES.IDLE
+                    );
+                  }
+                }, NOTICE_DURATION_MS);
+              } else {
+                const displayMsg = formatErrorMessage(res.message || res.error || 'Lỗi khi tải video');
+                stateManager.setState(TOOLBAR_STATES.ERROR, { action: 'download', error: typeof res.error === 'string' ? res.error : displayMsg });
+                toolbarController.showNotice(displayMsg, NOTICE_DURATION_MS);
+                console.warn(`[X Video Tools] Cobalt API download notice: ${displayMsg}`);
 
-              setTimeout(() => {
-                if (stateManager.getState() === TOOLBAR_STATES.ERROR) {
-                  stateManager.setState(
-                    isHoveringVideo || isHoveringToolbar ? TOOLBAR_STATES.HOVERED : TOOLBAR_STATES.IDLE
-                  );
-                }
-              }, NOTICE_DURATION_MS);
+                setTimeout(() => {
+                  if (stateManager.getState() === TOOLBAR_STATES.ERROR) {
+                    stateManager.setState(
+                      isHoveringVideo || isHoveringToolbar ? TOOLBAR_STATES.HOVERED : TOOLBAR_STATES.IDLE
+                    );
+                  }
+                }, NOTICE_DURATION_MS);
+              }
             }
           }
         });
       } catch (err) {
-        stateManager.setState(TOOLBAR_STATES.ERROR, { action: 'download', error: err.message });
-        toolbarController.showNotice(err.message || 'Lỗi kết nối nền', NOTICE_DURATION_MS);
-        setTimeout(() => {
-          if (stateManager.getState() === TOOLBAR_STATES.ERROR) {
-            stateManager.setState(
-              isHoveringVideo || isHoveringToolbar ? TOOLBAR_STATES.HOVERED : TOOLBAR_STATES.IDLE
-            );
-          }
-        }, NOTICE_DURATION_MS);
+        if (stateManager.getState() === TOOLBAR_STATES.PROCESSING) {
+          const errorMsg = formatErrorMessage(err?.message || err || 'Lỗi kết nối nền');
+          stateManager.setState(TOOLBAR_STATES.ERROR, { action: 'download', error: errorMsg });
+          toolbarController.showNotice(errorMsg, NOTICE_DURATION_MS);
+          setTimeout(() => {
+            if (stateManager.getState() === TOOLBAR_STATES.ERROR) {
+              stateManager.setState(
+                isHoveringVideo || isHoveringToolbar ? TOOLBAR_STATES.HOVERED : TOOLBAR_STATES.IDLE
+              );
+            }
+          }, NOTICE_DURATION_MS);
+        }
       }
     }
 
@@ -553,13 +597,20 @@ export function setupToolbarEvents({
   }
 
   function handleCdnClick(event) {
-    event.stopPropagation();
-    event.preventDefault();
+    if (event && event.button !== undefined && event.button !== 0) return;
+    event?.stopPropagation?.();
+    event?.preventDefault?.();
 
     if (stateManager.isDismissed()) return;
 
-    // Concurrency guard: Ignore clicks if resolution is already in-flight
-    if (stateManager.getState() === TOOLBAR_STATES.PROCESSING) {
+    // Concurrency guard: Ignore clicks if resolution or download is already in-flight, or if result notice is showing
+    const currentState = stateManager.getState();
+    if (
+      currentState === TOOLBAR_STATES.PROCESSING ||
+      currentState === TOOLBAR_STATES.DOWNLOADING ||
+      currentState === TOOLBAR_STATES.SUCCESS ||
+      currentState === TOOLBAR_STATES.COMPLETED
+    ) {
       return;
     }
 
@@ -579,14 +630,21 @@ export function setupToolbarEvents({
     }
 
     const isShiftClick = Boolean(event.shiftKey);
-    stateManager.setState(TOOLBAR_STATES.PROCESSING, { action: 'cdn' });
+    const transitioned = stateManager.setState(TOOLBAR_STATES.PROCESSING, { action: 'cdn' });
+    if (!transitioned) {
+      return;
+    }
 
     const resolver = options.cdnResolver || resolveCdnForVideo;
 
     function handleResult(result) {
       if (!result) return;
+      const curState = stateManager.getState();
+      if (curState !== TOOLBAR_STATES.PROCESSING && curState !== TOOLBAR_STATES.AMBIGUOUS) {
+        return;
+      }
       if (result.isAmbiguous) {
-        if (stateManager.getState() !== TOOLBAR_STATES.AMBIGUOUS) {
+        if (curState !== TOOLBAR_STATES.AMBIGUOUS) {
           stateManager.setState(TOOLBAR_STATES.AMBIGUOUS, { candidates: result.candidates });
         }
         return;
@@ -609,8 +667,9 @@ export function setupToolbarEvents({
           }
         }, NOTICE_DURATION_MS);
       } else {
-        stateManager.setState(TOOLBAR_STATES.ERROR, { action: 'cdn', error: result.code || result.error });
-        toolbarController.showNotice(result.error || 'Lỗi khi mở CDN', NOTICE_DURATION_MS);
+        const cdnErrorText = formatErrorMessage(result.error || result.message || 'Lỗi khi mở CDN');
+        stateManager.setState(TOOLBAR_STATES.ERROR, { action: 'cdn', error: result.code || cdnErrorText });
+        toolbarController.showNotice(cdnErrorText, NOTICE_DURATION_MS);
 
         setTimeout(() => {
           if (stateManager.getState() === TOOLBAR_STATES.ERROR) {
@@ -645,8 +704,13 @@ export function setupToolbarEvents({
 
           // Otherwise, enter AMBIGUOUS state and render picker popover
           stateManager.setState(TOOLBAR_STATES.AMBIGUOUS, { candidates });
-          renderMediaPicker(toolbarController.shadowRoot, candidates, {
+          if (activePicker) {
+            activePicker.destroy();
+            activePicker = null;
+          }
+          activePicker = renderMediaPicker(toolbarController.shadowRoot, candidates, {
             onSelect: async (selectedMedia, idx) => {
+              activePicker = null;
               stateManager.setState(TOOLBAR_STATES.PROCESSING, { action: 'cdn' });
               try {
                 const res = await resolveCallback(selectedMedia);
@@ -656,6 +720,7 @@ export function setupToolbarEvents({
               }
             },
             onCancel: () => {
+              activePicker = null;
               stateManager.setState(
                 isHoveringVideo || isHoveringToolbar ? TOOLBAR_STATES.HOVERED : TOOLBAR_STATES.IDLE
               );
@@ -699,8 +764,9 @@ export function setupToolbarEvents({
   }
 
   function handleDismissClick(event) {
-    event.stopPropagation();
-    event.preventDefault();
+    if (event && event.button !== undefined && event.button !== 0) return;
+    event?.stopPropagation?.();
+    event?.preventDefault?.();
 
     cancelHideTimer();
     toolbarController.dismiss();
@@ -741,6 +807,8 @@ export function setupToolbarEvents({
     host.addEventListener('click', onHostClick);
     host.addEventListener('mousedown', onHostClick);
     host.addEventListener('mouseup', onHostClick);
+    host.addEventListener('pointerdown', onHostClick);
+    host.addEventListener('pointerup', onHostClick);
   }
 
   // Initial check: if mouse is already resting over video wrapper when mounted, show immediately
@@ -761,6 +829,10 @@ export function setupToolbarEvents({
   let cdnBtn = null;
   let dismissBtn = null;
 
+  let downloadPointerHandler = null;
+  let cdnPointerHandler = null;
+  let dismissPointerHandler = null;
+
   let downloadKeydownHandler = null;
   let cdnKeydownHandler = null;
   let dismissKeydownHandler = null;
@@ -771,18 +843,36 @@ export function setupToolbarEvents({
     dismissBtn = shadowRoot.querySelector('.xvt-btn-dismiss');
 
     if (downloadBtn) {
+      downloadPointerHandler = (e) => {
+        if (e.button === 0) {
+          handleDownloadClick(e);
+        }
+      };
+      downloadBtn.addEventListener('pointerdown', downloadPointerHandler);
       downloadBtn.addEventListener('click', handleDownloadClick);
       downloadKeydownHandler = (e) => handleButtonKeydown(e, handleDownloadClick);
       downloadBtn.addEventListener('keydown', downloadKeydownHandler);
     }
 
     if (cdnBtn) {
+      cdnPointerHandler = (e) => {
+        if (e.button === 0) {
+          handleCdnClick(e);
+        }
+      };
+      cdnBtn.addEventListener('pointerdown', cdnPointerHandler);
       cdnBtn.addEventListener('click', handleCdnClick);
       cdnKeydownHandler = (e) => handleButtonKeydown(e, handleCdnClick);
       cdnBtn.addEventListener('keydown', cdnKeydownHandler);
     }
 
     if (dismissBtn) {
+      dismissPointerHandler = (e) => {
+        if (e.button === 0) {
+          handleDismissClick(e);
+        }
+      };
+      dismissBtn.addEventListener('pointerdown', dismissPointerHandler);
       dismissBtn.addEventListener('click', handleDismissClick);
       dismissKeydownHandler = (e) => handleButtonKeydown(e, handleDismissClick);
       dismissBtn.addEventListener('keydown', dismissKeydownHandler);
@@ -820,9 +910,14 @@ export function setupToolbarEvents({
       host.removeEventListener('click', onHostClick);
       host.removeEventListener('mousedown', onHostClick);
       host.removeEventListener('mouseup', onHostClick);
+      host.removeEventListener('pointerdown', onHostClick);
+      host.removeEventListener('pointerup', onHostClick);
     }
 
     if (downloadBtn) {
+      if (downloadPointerHandler) {
+        downloadBtn.removeEventListener('pointerdown', downloadPointerHandler);
+      }
       downloadBtn.removeEventListener('click', handleDownloadClick);
       if (downloadKeydownHandler) {
         downloadBtn.removeEventListener('keydown', downloadKeydownHandler);
@@ -830,6 +925,9 @@ export function setupToolbarEvents({
     }
 
     if (cdnBtn) {
+      if (cdnPointerHandler) {
+        cdnBtn.removeEventListener('pointerdown', cdnPointerHandler);
+      }
       cdnBtn.removeEventListener('click', handleCdnClick);
       if (cdnKeydownHandler) {
         cdnBtn.removeEventListener('keydown', cdnKeydownHandler);
@@ -837,6 +935,9 @@ export function setupToolbarEvents({
     }
 
     if (dismissBtn) {
+      if (dismissPointerHandler) {
+        dismissBtn.removeEventListener('pointerdown', dismissPointerHandler);
+      }
       dismissBtn.removeEventListener('click', handleDismissClick);
       if (dismissKeydownHandler) {
         dismissBtn.removeEventListener('keydown', dismissKeydownHandler);
@@ -845,6 +946,15 @@ export function setupToolbarEvents({
 
     if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage?.removeListener) {
       chrome.runtime.onMessage.removeListener(handleDownloadStatusChanged);
+    }
+
+    if (typeof unsubscribeState === 'function') {
+      unsubscribeState();
+    }
+
+    if (activePicker) {
+      activePicker.destroy();
+      activePicker = null;
     }
   }
 

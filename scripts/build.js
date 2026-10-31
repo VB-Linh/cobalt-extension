@@ -162,6 +162,9 @@ async function buildExtension() {
   fs.copyFileSync(resolve(distDir, 'service-worker.js'), resolve(rootDir, 'service-worker.js'));
   fs.copyFileSync(resolve(distDir, 'popup.html'), resolve(rootDir, 'popup.html'));
   fs.copyFileSync(resolve(distDir, 'popup.js'), resolve(rootDir, 'popup.js'));
+  if (fs.existsSync(resolve(distDir, 'sandbox.html'))) {
+    fs.copyFileSync(resolve(distDir, 'sandbox.html'), resolve(rootDir, 'sandbox.html'));
+  }
   if (fs.existsSync(resolve(distDir, 'assets'))) {
     fs.cpSync(resolve(distDir, 'assets'), resolve(rootDir, 'assets'), { recursive: true });
   }

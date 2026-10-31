@@ -1,11 +1,11 @@
 const I = Object.freeze({
   SETTINGS: "xvt_settings",
   JWT_SESSION: "cobalt_jwt_session"
-}), R = Object.freeze({
+}), w = Object.freeze({
   cobaltUrl: "",
   videoQuality: "1080",
   apiKey: ""
-}), O = Object.freeze({
+}), C = Object.freeze({
   DOWNLOAD_VIDEO: "DOWNLOAD_VIDEO",
   COBALT_DOWNLOAD: "COBALT_DOWNLOAD",
   OPEN_CDN: "OPEN_CDN",
@@ -15,40 +15,40 @@ const I = Object.freeze({
   GET_SESSION_STATUS: "GET_SESSION_STATUS",
   CLEAR_SESSION: "CLEAR_SESSION"
 });
-let D = { ...R };
-async function V() {
+let k = { ...w };
+async function x() {
   var e, r;
   try {
     if (typeof chrome < "u" && ((r = (e = chrome == null ? void 0 : chrome.storage) == null ? void 0 : e.local) != null && r.get)) {
-      const t = await chrome.storage.local.get(I.SETTINGS), n = t == null ? void 0 : t[I.SETTINGS], i = { ...R, ...n || {} };
-      return D = i, i;
+      const t = await chrome.storage.local.get(I.SETTINGS), n = t == null ? void 0 : t[I.SETTINGS], i = { ...w, ...n || {} };
+      return k = i, i;
     }
-    return { ...D };
+    return { ...k };
   } catch (t) {
-    return console.error("[X Video Tools] Không thể đọc cấu hình từ storage:", t), D = { ...R }, { ...R };
+    return console.error("[X Video Tools] Không thể đọc cấu hình từ storage:", t), k = { ...w }, { ...w };
   }
 }
-var j, H, X, Y;
-typeof chrome < "u" && ((H = (j = chrome == null ? void 0 : chrome.storage) == null ? void 0 : j.local) != null && H.get) && (V().catch(() => {
-}), (Y = (X = chrome == null ? void 0 : chrome.storage) == null ? void 0 : X.onChanged) != null && Y.addListener && chrome.storage.onChanged.addListener((e, r) => {
+var z, X, $, Y;
+typeof chrome < "u" && ((X = (z = chrome == null ? void 0 : chrome.storage) == null ? void 0 : z.local) != null && X.get) && (x().catch(() => {
+}), (Y = ($ = chrome == null ? void 0 : chrome.storage) == null ? void 0 : $.onChanged) != null && Y.addListener && chrome.storage.onChanged.addListener((e, r) => {
   if (r === "local" && e[I.SETTINGS]) {
     const t = e[I.SETTINGS].newValue;
-    D = { ...R, ...t || {} };
+    k = { ...w, ...t || {} };
   }
 }));
-function C(e) {
+function L(e) {
   if (!e || typeof e != "string") return "";
   const r = e.trim();
   if (!r) return "";
   try {
     const t = new URL(r), n = t.protocol.toLowerCase(), i = t.host.toLowerCase();
-    let l = t.pathname.replace(/\/+$/, "");
-    return l === "/" && (l = ""), `${n}//${i}${l}`;
+    let a = t.pathname.replace(/\/+$/, "");
+    return a === "/" && (a = ""), `${n}//${i}${a}`;
   } catch {
     return r.replace(/\/+$/, "");
   }
 }
-function w(e) {
+function U(e) {
   if (!e || typeof e != "string" || !e.trim())
     return { valid: !1, error: "EMPTY_URL" };
   const r = e.trim();
@@ -62,14 +62,14 @@ function w(e) {
   return n !== "http:" && n !== "https:" ? { valid: !1, error: "INVALID_PROTOCOL" } : t.hostname ? {
     valid: !0,
     origin: t.origin,
-    url: C(r)
+    url: L(r)
   } : { valid: !1, error: "MALFORMED_URL" };
 }
-function J(e) {
-  const r = w(e);
+function ee(e) {
+  const r = U(e);
   return !r.valid || !r.origin ? null : `${r.origin}/*`;
 }
-function Z(e) {
+function te(e) {
   if (!e)
     return "";
   const r = String(e).trim();
@@ -78,55 +78,55 @@ function Z(e) {
   const t = Number(r);
   return isNaN(t) || t <= 0 ? "" : (t / 1e15 * Math.PI).toString(36).replace(/(0+|\.)/g, "");
 }
-async function ee(e, r = {}) {
-  var o, a;
-  const t = typeof r.timeout == "number" ? r.timeout : 1e4, n = Z(e);
+async function re(e, r = {}) {
+  var o, s;
+  const t = typeof r.timeout == "number" ? r.timeout : 1e4, n = te(e);
   if (!n)
     return {
       success: !1,
       error: "INVALID_TWEET_ID",
       message: "Mã số bài viết (Tweet ID) không hợp lệ"
     };
-  const i = `https://cdn.syndication.twimg.com/tweet-result?id=${encodeURIComponent(e)}&token=${n}&lang=en`, l = new AbortController(), u = setTimeout(() => {
-    l.abort();
+  const i = `https://cdn.syndication.twimg.com/tweet-result?id=${encodeURIComponent(e)}&token=${n}&lang=en`, a = new AbortController(), u = setTimeout(() => {
+    a.abort();
   }, t);
   try {
-    const s = await fetch(i, {
+    const l = await fetch(i, {
       method: "GET",
       headers: {
         Accept: "application/json"
       },
-      signal: l.signal
+      signal: a.signal
     });
-    if (clearTimeout(u), s.status === 429)
+    if (clearTimeout(u), l.status === 429)
       return {
         success: !1,
         error: "API_RATE_LIMIT",
         status: 429,
         message: "Bị giới hạn tần suất truy vấn từ X (Rate limited)"
       };
-    if (s.status === 404)
+    if (l.status === 404)
       return {
         success: !1,
         error: "TWEET_INACCESSIBLE",
         status: 404,
         message: "Tweet không tồn tại hoặc bị giới hạn quyền riêng tư"
       };
-    if (s.status === 403)
+    if (l.status === 403)
       return {
         success: !1,
         error: "TWEET_INACCESSIBLE",
         status: 403,
         message: "Tweet không tồn tại hoặc bị giới hạn quyền riêng tư"
       };
-    if (!s.ok)
+    if (!l.ok)
       return {
         success: !1,
         error: "HTTP_ERROR",
-        status: s.status,
-        message: `Lỗi kết nối máy chủ (${s.status})`
+        status: l.status,
+        message: `Lỗi kết nối máy chủ (${l.status})`
       };
-    const c = await s.json();
+    const c = await l.json();
     return c != null && c.tombstone || c != null && c.errors || (c == null ? void 0 : c.__typename) === "TweetTombstone" ? {
       success: !1,
       error: "TWEET_INACCESSIBLE",
@@ -136,20 +136,20 @@ async function ee(e, r = {}) {
       data: c,
       mediaDetails: (c == null ? void 0 : c.mediaDetails) || []
     };
-  } catch (s) {
-    return clearTimeout(u), s.name === "AbortError" || (o = s.message) != null && o.includes("aborted") || (a = s.message) != null && a.includes("timeout") ? {
+  } catch (l) {
+    return clearTimeout(u), l.name === "AbortError" || (o = l.message) != null && o.includes("aborted") || (s = l.message) != null && s.includes("timeout") ? {
       success: !1,
       error: "API_TIMEOUT",
       message: "Hết thời gian chờ phản hồi từ máy chủ X"
     } : {
       success: !1,
       error: "NETWORK_ERROR",
-      message: s.message || "Lỗi kết nối mạng"
+      message: l.message || "Lỗi kết nối mạng"
     };
   }
 }
-const te = "video.twimg.com";
-function re(e) {
+const ne = "video.twimg.com";
+function ie(e) {
   if (!e || typeof e != "string")
     return !1;
   const r = e.trim();
@@ -157,19 +157,19 @@ function re(e) {
     return !1;
   try {
     const t = new URL(r);
-    if (t.protocol !== "https:" || t.hostname.toLowerCase() !== te)
+    if (t.protocol !== "https:" || t.hostname.toLowerCase() !== ne)
       return !1;
     const i = t.pathname;
     if (!i || i === "/" || i.trim() === "")
       return !1;
-    const l = i.toLowerCase();
-    return !(l.endsWith(".jpg") || l.endsWith(".jpeg") || l.endsWith(".png") || l.endsWith(".webp"));
+    const a = i.toLowerCase();
+    return !(a.endsWith(".jpg") || a.endsWith(".jpeg") || a.endsWith(".png") || a.endsWith(".webp"));
   } catch {
     return !1;
   }
 }
-async function ne(e) {
-  if (!re(e))
+async function oe(e) {
+  if (!ie(e))
     return {
       success: !1,
       error: "ERR_INVALID_URL",
@@ -190,71 +190,71 @@ async function ne(e) {
     };
   }
 }
-let S = null;
-function k() {
+let T = null;
+function P() {
   var e, r;
   return typeof chrome < "u" && !!((r = (e = chrome == null ? void 0 : chrome.storage) == null ? void 0 : e.session) != null && r.get);
 }
-async function ie(e, r, t = 180) {
+async function se(e, r, t = 180) {
   if (!r || typeof r != "string" || !r.trim())
     throw new TypeError("JWT token phải là một chuỗi không rỗng.");
-  const n = C(e), i = typeof t == "number" && t > 0 ? t : 180, l = Math.floor(Date.now() / 1e3) + i, u = {
+  const n = L(e), i = typeof t == "number" && t > 0 ? t : 180, a = Math.floor(Date.now() / 1e3) + i, u = {
     token: r.trim(),
-    exp: l,
+    exp: a,
     instanceUrl: n,
     createdAt: Date.now()
   };
-  if (S = u, k())
+  if (T = u, P())
     try {
       await chrome.storage.session.set({
         [I.JWT_SESSION]: u
       });
     } catch {
     }
-  return { success: !0, expiresAt: l };
+  return { success: !0, expiresAt: a };
 }
-function oe(e = "") {
-  if (!S || !S.token) return null;
+function ae(e = "") {
+  if (!T || !T.token) return null;
   if (e && typeof e == "string" && e.trim()) {
-    const t = C(e);
-    if (S.instanceUrl && S.instanceUrl !== t)
+    const t = L(e);
+    if (T.instanceUrl && T.instanceUrl !== t)
       return null;
   }
-  return Math.floor(Date.now() / 1e3) >= S.exp - 3 ? (S = null, null) : S.token;
+  return Math.floor(Date.now() / 1e3) >= T.exp - 3 ? (T = null, null) : T.token;
 }
-async function se(e = "") {
-  let r = S;
-  if (k())
+async function ce(e = "") {
+  let r = T;
+  if (P())
     try {
       const n = await chrome.storage.session.get(I.JWT_SESSION);
       n && n[I.JWT_SESSION] && (r = n[I.JWT_SESSION]);
     } catch {
-      r = S;
+      r = T;
     }
   if (!r || !r.token)
     return null;
   if (e && typeof e == "string" && e.trim()) {
-    const n = C(e);
+    const n = L(e);
     if (r.instanceUrl && r.instanceUrl !== n)
       return null;
   }
-  return Math.floor(Date.now() / 1e3) >= r.exp - 3 ? (await x(), null) : r.token;
+  return Math.floor(Date.now() / 1e3) >= r.exp - 3 ? (await K(), null) : r.token;
 }
-async function x() {
-  if (S = null, k())
+async function K() {
+  if (T = null, P())
     try {
       await chrome.storage.session.remove(I.JWT_SESSION);
     } catch {
     }
 }
-async function ae(e = "") {
-  let r = S;
-  if (k())
+async function le(e = "") {
+  let r = T;
+  if (P())
     try {
       const i = await chrome.storage.session.get(I.JWT_SESSION);
       i && i[I.JWT_SESSION] && (r = i[I.JWT_SESSION]);
     } catch {
-      r = S;
+      r = T;
     }
   if (!r || !r.token)
     return {
@@ -264,7 +264,7 @@ async function ae(e = "") {
       instanceUrl: null
     };
   if (e && typeof e == "string" && e.trim()) {
-    const i = C(e);
+    const i = L(e);
     if (r.instanceUrl && r.instanceUrl !== i)
       return {
         authenticated: !1,
@@ -286,7 +286,7 @@ async function ae(e = "") {
     instanceUrl: r.instanceUrl
   };
 }
-const ce = "max", le = 15e3, ue = Object.freeze([
+const ue = "max", he = 15e3, fe = Object.freeze([
   "max",
   "4320",
   "2160",
@@ -297,14 +297,14 @@ const ce = "max", le = 15e3, ue = Object.freeze([
   "360",
   "240",
   "144"
-]), he = Object.freeze([
+]), ge = Object.freeze([
   "best",
   "mp3",
   "ogg",
   "wav",
   "opus"
 ]);
-function $(e = "", r = "") {
+function q(e = "", r = "") {
   const t = {
     Accept: "application/json",
     "Content-Type": "application/json"
@@ -315,9 +315,9 @@ function de(e = {}) {
   if (!e.url || typeof e.url != "string")
     throw new TypeError('Tham số "url" là bắt buộc và phải là chuỗi hợp lệ.');
   let r = e.videoQuality;
-  !r || !ue.includes(String(r)) ? r = ce : r = String(r);
+  !r || !fe.includes(String(r)) ? r = ue : r = String(r);
   let t = e.audioFormat;
-  !t || !he.includes(String(t)) ? t = "mp3" : t = String(t);
+  !t || !ge.includes(String(t)) ? t = "mp3" : t = String(t);
   let n = e.downloadMode;
   !n || !["auto", "audio", "mute"].includes(String(n)) ? n = "auto" : n = String(n);
   let i = e.filenameStyle;
@@ -331,8 +331,8 @@ function de(e = {}) {
     alwaysProxy: !!e.alwaysProxy
   };
 }
-async function fe(e = {}) {
-  var E, _, m;
+async function me(e = {}) {
+  var f, _, m;
   const r = e.apiUrl || e.instanceUrl;
   if (!r || typeof r != "string" || !r.trim())
     return {
@@ -340,113 +340,113 @@ async function fe(e = {}) {
       error: "UNCONFIGURED",
       message: "Chưa cài đặt Cobalt URL. Bấm vào icon tiện ích để thiết lập."
     };
-  if (!w(r).valid)
+  if (!U(r).valid)
     return {
       success: !1,
       error: "INVALID_URL",
       message: "URL máy chủ Cobalt không hợp lệ."
     };
-  const i = `${C(r)}/`, l = de({
+  const i = `${L(r)}/`, a = de({
     url: e.url,
     videoQuality: e.videoQuality,
     audioFormat: e.audioFormat,
     downloadMode: e.downloadMode,
     filenameStyle: e.filenameStyle,
     alwaysProxy: e.alwaysProxy
-  }), u = e.sessionToken || (e.apiKey ? "" : oe(r)) || "", o = $(e.apiKey, u), a = typeof e.timeout == "number" ? e.timeout : le, s = new AbortController();
+  }), u = e.sessionToken || (e.apiKey ? "" : ae(r)) || "", o = q(e.apiKey, u), s = typeof e.timeout == "number" ? e.timeout : he, l = new AbortController();
   let c = !1, h = null;
-  a > 0 && (h = setTimeout(() => {
-    c = !0, s.abort();
-  }, a)), e.signal && (e.signal.aborted ? s.abort() : e.signal.addEventListener("abort", () => s.abort(), { once: !0 }));
+  s > 0 && (h = setTimeout(() => {
+    c = !0, l.abort();
+  }, s)), e.signal && (e.signal.aborted ? l.abort() : e.signal.addEventListener("abort", () => l.abort(), { once: !0 }));
   try {
-    const d = await fetch(i, {
+    const g = await fetch(i, {
       method: "POST",
       headers: o,
-      body: JSON.stringify(l),
-      signal: s.signal
+      body: JSON.stringify(a),
+      signal: l.signal
     });
     h && clearTimeout(h);
-    let f;
-    const T = await d.text();
+    let d;
+    const p = await g.text();
     try {
-      f = JSON.parse(T);
+      d = JSON.parse(p);
     } catch {
       return {
         success: !1,
         error: "MALFORMED_RESPONSE",
         message: "Máy chủ trả về phản hồi không hợp lệ.",
-        httpStatus: d.status
+        httpStatus: g.status
       };
     }
-    if (!d.ok || f.status === "error") {
-      const g = ((E = f.error) == null ? void 0 : E.code) || "API_ERROR";
-      if (g === "error.api.auth.jwt.invalid" || g === "error.api.auth.jwt.missing")
+    if (!g.ok || d.status === "error") {
+      const E = ((f = d.error) == null ? void 0 : f.code) || "API_ERROR";
+      if (E === "error.api.auth.jwt.invalid" || E === "error.api.auth.jwt.missing")
         try {
-          await x();
+          await K();
         } catch {
         }
       return {
         success: !1,
         status: "error",
-        error: g,
-        code: g,
-        context: ((_ = f.error) == null ? void 0 : _.context) || {},
-        httpStatus: d.status,
-        raw: f
+        error: E,
+        code: E,
+        context: ((_ = d.error) == null ? void 0 : _.context) || {},
+        httpStatus: g.status,
+        raw: d
       };
     }
     return {
       success: !0,
-      status: f.status,
-      url: f.url,
-      filename: f.filename,
-      picker: f.picker,
-      raw: f
+      status: d.status,
+      url: d.url,
+      filename: d.filename,
+      picker: d.picker,
+      raw: d
     };
-  } catch (d) {
+  } catch (g) {
     if (h && clearTimeout(h), c) {
-      const T = new Error("Hết thời gian chờ phản hồi từ máy chủ Cobalt.");
-      throw Object.assign(T, {
+      const p = new Error("Hết thời gian chờ phản hồi từ máy chủ Cobalt.");
+      throw Object.assign(p, {
         success: !1,
         error: "API_TIMEOUT",
         code: "API_TIMEOUT"
-      }), T;
+      }), p;
     }
-    if ((m = e.signal) != null && m.aborted || d.name === "AbortError") {
-      const T = new Error("Yêu cầu đã bị hủy.");
-      throw Object.assign(T, {
+    if ((m = e.signal) != null && m.aborted || g.name === "AbortError") {
+      const p = new Error("Yêu cầu đã bị hủy.");
+      throw Object.assign(p, {
         success: !1,
         error: "ABORTED",
         code: "ABORTED",
         cancelled: !0
-      }), T;
+      }), p;
     }
     return {
       success: !1,
       error: "UNREACHABLE",
       message: !!(r.includes("localhost") || r.includes("127.0.0.1") || r.includes("[::1]")) ? "Không thể kết nối máy chủ Cobalt nội bộ (localhost:9000). Vui lòng khởi động scripts\\start-cobalt-windows.bat." : "Không thể kết nối đến máy chủ Cobalt. Kiểm tra URL hoặc kết nối mạng.",
-      details: d.message,
+      details: g.message,
       apiUrl: r
     };
   }
 }
-async function ge(e, r = "", t = {}) {
-  var u, o, a, s;
+async function Ee(e, r = "", t = {}) {
+  var u, o, s, l;
   if (!e || typeof e != "string" || !e.trim())
     return {
       healthy: !1,
       error: "UNCONFIGURED",
       message: "Chưa cấu hình URL máy chủ Cobalt."
     };
-  if (!w(e).valid)
+  if (!U(e).valid)
     return {
       healthy: !1,
       error: "INVALID_URL",
       message: "URL máy chủ Cobalt không hợp lệ."
     };
-  const i = C(e), l = `${i}/`;
+  const i = L(e), a = `${i}/`;
   try {
-    const c = await fetch(l, {
+    const c = await fetch(a, {
       method: "GET",
       headers: {
         Accept: "application/json"
@@ -460,23 +460,23 @@ async function ge(e, r = "", t = {}) {
         error: "SERVER_ERROR",
         message: `Máy chủ phản hồi với mã lỗi HTTP ${c.status}`
       };
-    const h = await c.json(), E = ((u = h.cobalt) == null ? void 0 : u.version) || "unknown", _ = ((o = h.cobalt) == null ? void 0 : o.services) || [];
+    const h = await c.json(), f = ((u = h.cobalt) == null ? void 0 : u.version) || "unknown", _ = ((o = h.cobalt) == null ? void 0 : o.services) || [];
     let m = null;
-    if (r && r.trim().length > 0 && (m = await me(i, r.trim()), m && !m.valid))
+    if (r && r.trim().length > 0 && (m = await pe(i, r.trim()), m && !m.valid))
       return {
         healthy: !1,
-        version: E,
+        version: f,
         services: _,
         error: m.error || "AUTH_KEY_INVALID",
         message: "API Key không chính xác hoặc không được chấp nhận bởi máy chủ."
       };
-    const d = !!((a = h.cobalt) != null && a.turnstileSitekey), f = ((s = h.cobalt) == null ? void 0 : s.turnstileSitekey) || null;
+    const g = !!((s = h.cobalt) != null && s.turnstileSitekey), d = ((l = h.cobalt) == null ? void 0 : l.turnstileSitekey) || null;
     return {
       healthy: !0,
-      version: E,
+      version: f,
       services: _,
-      turnstileRequired: d,
-      turnstileSitekey: f,
+      turnstileRequired: g,
+      turnstileSitekey: d,
       keyValidation: m,
       raw: h
     };
@@ -490,46 +490,92 @@ async function ge(e, r = "", t = {}) {
     };
   }
 }
-async function me(e, r) {
+async function pe(e, r) {
   var t;
   try {
     const i = await (await fetch(`${e}/`, {
       method: "POST",
-      headers: $(r),
+      headers: q(r),
       body: JSON.stringify({})
-    })).json().catch(() => ({})), l = (t = i == null ? void 0 : i.error) == null ? void 0 : t.code;
-    return l === "error.api.link.missing" ? { valid: !0 } : l && (l.startsWith("error.api.auth.key.") || l.startsWith("error.api.auth.jwt.")) ? { valid: !1, error: l } : { valid: !0 };
+    })).json().catch(() => ({})), a = (t = i == null ? void 0 : i.error) == null ? void 0 : t.code;
+    return a === "error.api.link.missing" ? { valid: !0 } : a && (a.startsWith("error.api.auth.key.") || a.startsWith("error.api.auth.jwt.")) ? { valid: !1, error: a } : { valid: !0 };
   } catch {
     return { valid: !1, error: "PROBE_FAILED" };
   }
 }
-function Ee(e, r = {}) {
+function ye(e, r = {}) {
   if (!Array.isArray(e) || e.length === 0)
     return null;
-  const t = (o) => !!(o && (o.type === "video" || o.type === "gif" || o.type === "animated_gif" || !o.type)), n = e.filter(t), i = n.length > 0 ? n : e, l = r == null ? void 0 : r.mediaIndex;
-  if (typeof l == "number" && l > 0) {
-    const o = e[l - 1];
+  const t = (o) => !!(o && (o.type === "video" || o.type === "gif" || o.type === "animated_gif" || !o.type)), n = e.filter(t), i = n.length > 0 ? n : e, a = r == null ? void 0 : r.mediaIndex;
+  if (typeof a == "number" && a > 0) {
+    const o = e[a - 1];
     if (o && o.url && t(o))
       return o;
-    const a = n[l - 1];
-    if (a && a.url)
-      return a;
+    const s = n[a - 1];
+    if (s && s.url)
+      return s;
   }
   const u = r == null ? void 0 : r.mediaFingerprint;
   if (u && typeof u == "string") {
     const o = u.trim();
     if (o.length > 0) {
-      const a = i.filter((s) => {
-        const c = s.thumb ? String(s.thumb) : "", h = s.url ? String(s.url) : "";
+      const s = i.filter((l) => {
+        const c = l.thumb ? String(l.thumb) : "", h = l.url ? String(l.url) : "";
         return c.includes(o) || h.includes(o);
       });
-      if (a.length === 1)
-        return a[0];
+      if (s.length === 1)
+        return s[0];
     }
   }
   return i.length === 1 && i[0].url ? i[0] : null;
 }
-const b = Object.freeze({
+function A(e) {
+  return typeof e != "string" ? e : e.replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer [REDACTED]").replace(/Api-Key\s+[A-Za-z0-9._~+/-]+=*/gi, "Api-Key [REDACTED]").replace(/\b(api[_-]?key|session[_-]?token|token|jwt|secret|password|auth)=([^&\s]+)/gi, "$1=[REDACTED]").replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}(?:\.[A-Za-z0-9_-]*)?\b/g, "[REDACTED_JWT]");
+}
+function J(e, r = "Lỗi không xác định.") {
+  if (e == null || e === "")
+    return r;
+  if (typeof e == "string") {
+    const t = e.trim();
+    return A(t) || r;
+  }
+  if (typeof e == "number" || typeof e == "boolean")
+    return String(e);
+  if (typeof e == "object") {
+    if (typeof e.message == "string" && e.message.trim())
+      return A(e.message.trim());
+    if (typeof e.error == "string" && e.error.trim())
+      return A(e.error.trim());
+    if (e.error && typeof e.error == "object") {
+      if (typeof e.error.message == "string" && e.error.message.trim())
+        return A(e.error.message.trim());
+      if (typeof e.error.code == "string" && e.error.code.trim())
+        return A(e.error.code.trim());
+    }
+    if (typeof e.code == "string" && e.code.trim())
+      return A(e.code.trim());
+    if (typeof e.rawCode == "string" && e.rawCode.trim())
+      return A(e.rawCode.trim());
+    if (typeof e.statusText == "string" && e.statusText.trim())
+      return A(e.statusText.trim());
+    if (typeof e.details == "string" && e.details.trim())
+      return A(e.details.trim());
+    try {
+      if (Object.keys(e).length > 0) {
+        const n = { ...e };
+        for (const a of Object.keys(n)) {
+          const u = a.toLowerCase();
+          (u.includes("key") || u.includes("token") || u.includes("secret") || u.includes("jwt") || u.includes("auth") || u.includes("pass")) && delete n[a];
+        }
+        const i = JSON.stringify(n);
+        if (i && i !== "{}") return A(i);
+      }
+    } catch {
+    }
+  }
+  return r;
+}
+const D = Object.freeze({
   REDIRECT: "redirect",
   TUNNEL: "tunnel",
   PICKER: "picker",
@@ -580,24 +626,24 @@ const b = Object.freeze({
   API_TIMEOUT: "Hết thời gian chờ phản hồi từ máy chủ Cobalt. Vui lòng thử lại sau.",
   ABORTED: "Yêu cầu tải đã bị hủy."
 });
-function K(e, r = "") {
-  var o, a;
-  let t = "", n = {};
-  typeof e == "string" ? t = e : e && typeof e == "object" && (t = e.code || ((o = e.error) == null ? void 0 : o.code) || e.error || "", n = e.context || ((a = e.error) == null ? void 0 : a.context) || {});
-  const i = String(r || (e == null ? void 0 : e.apiUrl) || (e == null ? void 0 : e.url) || (n == null ? void 0 : n.url) || ""), l = !!(i.includes("localhost") || i.includes("127.0.0.1") || i.includes("[::1]"));
-  if (t === "UNREACHABLE" || t === "SERVER_UNREACHABLE" || t === "LOCAL_OFFLINE" || t === "LOCAL_SERVICE_OFFLINE")
+function W(e, r = "") {
+  var l, c, h;
+  let t = "", n = {}, i = "";
+  typeof e == "string" ? t = e.trim() : e && typeof e == "object" && (typeof e.code == "string" ? t = e.code.trim() : typeof ((l = e.error) == null ? void 0 : l.code) == "string" ? t = e.error.code.trim() : typeof e.error == "string" ? t = e.error.trim() : typeof e.rawCode == "string" && (t = e.rawCode.trim()), typeof e.message == "string" && e.message.trim() ? i = e.message.trim() : typeof ((c = e.error) == null ? void 0 : c.message) == "string" && e.error.message.trim() && (i = e.error.message.trim()), n = e.context || ((h = e.error) == null ? void 0 : h.context) || {});
+  const a = String(r || (e == null ? void 0 : e.apiUrl) || (e == null ? void 0 : e.url) || (n == null ? void 0 : n.url) || ""), u = !!(a.includes("localhost") || a.includes("127.0.0.1") || a.includes("[::1]")), o = typeof t == "string" ? t.toUpperCase() : "";
+  if (o === "UNREACHABLE" || o === "SERVER_UNREACHABLE" || o === "LOCAL_OFFLINE" || o === "LOCAL_SERVICE_OFFLINE" || t === "error.api.unreachable")
     return {
       code: "UNREACHABLE",
       rawCode: t,
-      message: l ? "Không thể kết nối máy chủ Cobalt nội bộ (localhost:9000). Vui lòng khởi động scripts\\start-cobalt-windows.bat." : "Không thể kết nối đến máy chủ Cobalt. Vui lòng kiểm tra lại URL hoặc mạng."
+      message: u ? "Không thể kết nối máy chủ Cobalt nội bộ (localhost:9000). Vui lòng khởi động scripts\\start-cobalt-windows.bat." : "Không thể kết nối đến máy chủ Cobalt. Vui lòng kiểm tra lại URL hoặc mạng."
     };
-  if (t === "API_TIMEOUT")
+  if (t === "API_TIMEOUT" || t === "timed_out" || t === "error.api.timed_out")
     return {
       code: "API_TIMEOUT",
       rawCode: t,
       message: "Hết thời gian chờ phản hồi từ máy chủ Cobalt. Vui lòng thử lại sau."
     };
-  if (t === "ABORTED")
+  if (t === "ABORTED" || t === "aborted")
     return {
       code: "ABORTED",
       rawCode: t,
@@ -610,11 +656,11 @@ function K(e, r = "") {
       message: "Yêu cầu API Key hợp lệ. Vui lòng thiết lập trong cài đặt."
     };
   if (t === "error.api.auth.jwt.missing" || t === "error.api.auth.jwt.invalid" || t === "auth.jwt.missing" || t === "auth.jwt.invalid") {
-    const s = t.includes("invalid");
+    const f = t.includes("invalid");
     return {
-      code: s ? "AUTH_EXPIRED" : "AUTH_REQUIRED",
+      code: f ? "AUTH_EXPIRED" : "AUTH_REQUIRED",
       rawCode: t,
-      message: s ? "Phiên xác thực Turnstile hoặc API Key không hợp lệ hoặc đã hết hạn." : "Máy chủ yêu cầu xác thực phiên Turnstile hoặc API Key."
+      message: f ? "Phiên xác thực Turnstile hoặc API Key không hợp lệ hoặc đã hết hạn." : "Máy chủ yêu cầu xác thực phiên Turnstile hoặc API Key."
     };
   }
   if (t === "error.api.auth.turnstile.invalid" || t === "auth.turnstile.invalid")
@@ -635,15 +681,21 @@ function K(e, r = "") {
       rawCode: t,
       message: "API Key không chính xác hoặc đã bị vô hiệu hóa trên máy chủ Cobalt."
     };
-  if (t === "error.api.rate_exceeded" || t === "rate_exceeded") {
-    const s = n.limit || 15;
+  if (t === "error.api.rate_exceeded" || t === "rate_exceeded" || t === "error.api.rate_limit" || t === "rate_limit" || o === "RATE_LIMIT") {
+    const f = n.limit || 15;
     return {
       code: "RATE_LIMIT",
       rawCode: t,
-      retryAfter: Number(s),
-      message: `Đã vượt quá giới hạn tải. Vui lòng thử lại sau ${s} giây.`
+      retryAfter: Number(f),
+      message: `Đã vượt quá giới hạn tải. Vui lòng thử lại sau ${f} giây.`
     };
   }
+  if (t === "capacity" || t === "error.api.capacity")
+    return {
+      code: "CAPACITY",
+      rawCode: t,
+      message: "Máy chủ Cobalt hiện đang quá tải. Vui lòng thử lại sau ít giây."
+    };
   if (t.includes("content.video.private") || t.includes("content.post.private"))
     return {
       code: "CONTENT_PRIVATE",
@@ -680,11 +732,11 @@ function K(e, r = "") {
       rawCode: t,
       message: "Không tìm thấy video hoặc tệp phương tiện nào trong bài viết này."
     };
-  let u = G[t] || G["error.api.generic"];
-  return n.limit && (u = u.replace("{limit}", String(n.limit))), n.service && (u = u.replace("{service}", String(n.service))), {
+  let s = G[t] || i || G["error.api.generic"];
+  return n.limit && typeof s == "string" && (s = s.replace(/\{\{\s*limit\s*\}\}|\{limit\}/g, String(n.limit))), n.service && typeof s == "string" && (s = s.replace(/\{\{\s*service\s*\}\}|\{service\}/g, String(n.service))), {
     code: "API_ERROR",
-    rawCode: t,
-    message: u
+    rawCode: typeof t == "string" ? t : "",
+    message: typeof s == "string" ? s : J(s)
   };
 }
 function Te(e, r = "") {
@@ -695,7 +747,7 @@ function Te(e, r = "") {
       message: "Dữ liệu phản hồi từ máy chủ không hợp lệ."
     };
   const t = e.status;
-  if (t === b.REDIRECT) {
+  if (t === D.REDIRECT) {
     const n = e.url;
     return !n || typeof n != "string" || !n.startsWith("https://") ? {
       success: !1,
@@ -708,7 +760,7 @@ function Te(e, r = "") {
       filename: e.filename || ""
     };
   }
-  if (t === b.TUNNEL) {
+  if (t === D.TUNNEL) {
     const n = e.url;
     if (!n || typeof n != "string")
       return {
@@ -717,8 +769,8 @@ function Te(e, r = "") {
         message: "Đường dẫn tunnel stream không hợp lệ."
       };
     try {
-      const l = new URL(n).searchParams;
-      if (["id", "exp", "sig", "sec", "iv"].filter((a) => !l.has(a)).length > 0)
+      const a = new URL(n).searchParams;
+      if (["id", "exp", "sig", "sec", "iv"].filter((s) => !a.has(s)).length > 0)
         return {
           success: !1,
           error: "INCOMPLETE_TUNNEL_URL",
@@ -739,7 +791,7 @@ function Te(e, r = "") {
       filename: e.filename || ""
     };
   }
-  if (t === b.PICKER) {
+  if (t === D.PICKER) {
     const n = e.picker;
     if (!Array.isArray(n) || n.length === 0)
       return {
@@ -747,11 +799,11 @@ function Te(e, r = "") {
         error: "EMPTY_PICKER",
         message: "Danh sách video trong bài viết trống."
       };
-    const i = n.map((l, u) => ({
+    const i = n.map((a, u) => ({
       index: u,
-      type: l.type || "video",
-      url: l.url,
-      thumb: l.thumb
+      type: a.type || "video",
+      url: a.url,
+      thumb: a.thumb
     }));
     return {
       success: !0,
@@ -762,14 +814,14 @@ function Te(e, r = "") {
       audioFilename: e.audioFilename
     };
   }
-  if (t === b.LOCAL_PROCESSING)
+  if (t === D.LOCAL_PROCESSING)
     return {
       success: !1,
       error: "LOCAL_PROCESSING_UNSUPPORTED",
       message: "Máy chủ yêu cầu xử lý cục bộ (local processing), tính năng chưa được hỗ trợ trên trình duyệt."
     };
-  if (t === b.ERROR || e.error) {
-    const n = K(e);
+  if (t === D.ERROR || e.error) {
+    const n = W(e);
     return {
       success: !1,
       error: n.code,
@@ -791,12 +843,12 @@ const y = Object.freeze({
   INTERRUPTED: "interrupted",
   CANCELLED: "cancelled",
   ERROR: "error"
-}), L = /* @__PURE__ */ new Map(), v = /* @__PURE__ */ new Map();
-let B = !1;
-function pe(e) {
+}), b = /* @__PURE__ */ new Map(), v = /* @__PURE__ */ new Map();
+let H = !1;
+function Se(e) {
   return !e || typeof e != "string" ? "" : e.replace(/[\\/:*?"<>|]/g, "_").trim();
 }
-function P(e, r) {
+function M(e, r) {
   var t;
   if (typeof chrome < "u" && typeof ((t = chrome.tabs) == null ? void 0 : t.sendMessage) == "function" && e)
     try {
@@ -807,16 +859,16 @@ function P(e, r) {
     } catch {
     }
 }
-function z() {
+function Q() {
   var e, r;
-  B || typeof chrome > "u" || !((r = (e = chrome.downloads) == null ? void 0 : e.onChanged) != null && r.addListener) || (chrome.downloads.onChanged.addListener((t) => {
-    var l;
+  H || typeof chrome > "u" || !((r = (e = chrome.downloads) == null ? void 0 : e.onChanged) != null && r.addListener) || (chrome.downloads.onChanged.addListener((t) => {
+    var a;
     if (!t || !t.id) return;
     const n = t.id, i = v.get(n);
     if (i && (t.filename && t.filename.current && (i.filename = t.filename.current), t.state)) {
       const u = t.state.current;
       if (u === "complete")
-        i.state = y.COMPLETED, i.videoKey && L.delete(i.videoKey), v.delete(n), P(i.tabId, {
+        i.state = y.COMPLETED, i.videoKey && b.delete(i.videoKey), v.delete(n), M(i.tabId, {
           type: "DOWNLOAD_STATUS_CHANGED",
           downloadId: n,
           videoKey: i.videoKey,
@@ -824,9 +876,9 @@ function z() {
           filename: i.filename
         }), typeof i.onComplete == "function" && i.onComplete({ downloadId: n, state: y.COMPLETED }), typeof i.resolve == "function" && i.resolve({ success: !0, downloadId: n, state: y.COMPLETED });
       else if (u === "interrupted") {
-        const o = ((l = t.error) == null ? void 0 : l.current) || "UNKNOWN_ERROR", a = o === "USER_CANCELED";
-        if (i.state = a ? y.CANCELLED : y.INTERRUPTED, i.videoKey && L.delete(i.videoKey), v.delete(n), a)
-          P(i.tabId, {
+        const o = ((a = t.error) == null ? void 0 : a.current) || "UNKNOWN_ERROR", s = o === "USER_CANCELED";
+        if (i.state = s ? y.CANCELLED : y.INTERRUPTED, i.videoKey && b.delete(i.videoKey), v.delete(n), s)
+          M(i.tabId, {
             type: "DOWNLOAD_STATUS_CHANGED",
             downloadId: n,
             videoKey: i.videoKey,
@@ -838,25 +890,25 @@ function z() {
             videoKey: i.videoKey,
             error: o
           });
-          const s = "Quá trình tải video bị gián đoạn do lỗi kết nối mạng.";
-          if (P(i.tabId, {
+          const l = "Quá trình tải video bị gián đoạn do lỗi kết nối mạng.";
+          if (M(i.tabId, {
             type: "DOWNLOAD_STATUS_CHANGED",
             downloadId: n,
             videoKey: i.videoKey,
             state: "interrupted",
             error: o,
-            message: s
-          }), typeof i.onError == "function" && i.onError({ downloadId: n, error: o, message: s }), typeof i.reject == "function") {
-            const c = new Error(s);
+            message: l
+          }), typeof i.onError == "function" && i.onError({ downloadId: n, error: o, message: l }), typeof i.reject == "function") {
+            const c = new Error(l);
             Object.assign(c, { downloadId: n, error: o, state: y.INTERRUPTED }), i.reject(c);
           }
         }
       }
     }
-  }), B = !0);
+  }), H = !0);
 }
-async function ye(e = {}) {
-  if (z(), !e.url || typeof e.url != "string")
+async function Ie(e = {}) {
+  if (Q(), !e.url || typeof e.url != "string")
     return {
       success: !1,
       error: "INVALID_URL",
@@ -868,7 +920,7 @@ async function ye(e = {}) {
     saveAs: e.saveAs !== void 0 ? e.saveAs : !1
   };
   let t = e.filename;
-  t && typeof t == "string" && (t = pe(t), !t.endsWith(".mp4") && !t.endsWith(".gif") && !t.endsWith(".mp3") && (t += ".mp4"), r.filename = t);
+  t && typeof t == "string" && (t = Se(t), !t.endsWith(".mp4") && !t.endsWith(".gif") && !t.endsWith(".mp3") && (t += ".mp4"), r.filename = t);
   try {
     return {
       success: !0,
@@ -888,8 +940,8 @@ async function ye(e = {}) {
     };
   }
 }
-function Se(e, r = {}) {
-  return z(), new Promise((t, n) => {
+function _e(e, r = {}) {
+  return Q(), new Promise((t, n) => {
     v.set(e, {
       downloadId: e,
       videoKey: r.videoKey,
@@ -904,9 +956,9 @@ function Se(e, r = {}) {
     });
   });
 }
-async function M(e, r = {}) {
-  if (e && L.has(e)) {
-    const n = L.get(e);
+async function V(e, r = {}) {
+  if (e && b.has(e)) {
+    const n = b.get(e);
     if (n.state === y.IN_PROGRESS || n.state === y.INITIATED)
       return {
         blocked: !0,
@@ -916,20 +968,20 @@ async function M(e, r = {}) {
       };
   }
   const t = r.correlationId || `${e}_${Date.now()}`;
-  e && L.set(e, {
+  e && b.set(e, {
     state: y.INITIATED,
     correlationId: t,
     startTime: Date.now()
   });
   try {
-    const n = await ye(r);
+    const n = await Ie(r);
     if (!n.success)
-      return e && L.delete(e), n;
+      return e && b.delete(e), n;
     if (e) {
-      const i = L.get(e);
+      const i = b.get(e);
       i && (i.downloadId = n.downloadId, i.state = y.IN_PROGRESS);
     }
-    return Se(n.downloadId, {
+    return _e(n.downloadId, {
       videoKey: e,
       tabId: r.tabId,
       filename: n.filename
@@ -945,19 +997,19 @@ async function M(e, r = {}) {
       videoKey: e,
       error: n.message,
       stack: n.stack
-    }), e && L.delete(e), {
+    }), e && b.delete(e), {
       success: !1,
       error: "DOWNLOAD_EXCEPTION",
       message: n.message
     };
   }
 }
-const Ie = 15e3;
-function _e(e) {
+const Ae = 15e3;
+function Ne(e) {
   return !e || typeof e != "object" ? { valid: !1, error: "MALFORMED_SESSION_DATA" } : typeof e.token != "string" || !e.token.trim() ? { valid: !1, error: "INVALID_SESSION_TOKEN" } : typeof e.exp != "number" || Number.isNaN(e.exp) || e.exp <= 0 ? { valid: !1, error: "INVALID_SESSION_EXPIRY" } : { valid: !0 };
 }
-async function Ae(e, r, t = {}) {
-  var c, h, E, _;
+async function Oe(e, r, t = {}) {
+  var c, h, f, _;
   if (!e || typeof e != "string" || !e.trim())
     return {
       success: !1,
@@ -965,7 +1017,7 @@ async function Ae(e, r, t = {}) {
       code: "UNCONFIGURED",
       message: "Chưa cài đặt Cobalt URL. Vui lòng thiết lập trong cài đặt."
     };
-  if (!w(e).valid)
+  if (!U(e).valid)
     return {
       success: !1,
       error: "INVALID_URL",
@@ -979,14 +1031,14 @@ async function Ae(e, r, t = {}) {
       code: "TURNSTILE_RESPONSE_MISSING",
       message: "Thiếu mã xác thực Turnstile. Vui lòng hoàn thành xác thực."
     };
-  const l = `${C(e)}/session`, u = typeof t.timeout == "number" ? t.timeout : Ie, o = new AbortController();
-  let a = !1;
-  const s = setTimeout(() => {
-    a = !0, o.abort();
+  const a = `${L(e)}/session`, u = typeof t.timeout == "number" ? t.timeout : Ae, o = new AbortController();
+  let s = !1;
+  const l = setTimeout(() => {
+    s = !0, o.abort();
   }, u);
   t.signal && (t.signal.aborted ? o.abort() : t.signal.addEventListener("abort", () => o.abort(), { once: !0 }));
   try {
-    const m = await fetch(l, {
+    const m = await fetch(a, {
       method: "POST",
       headers: {
         Accept: "application/json",
@@ -994,10 +1046,10 @@ async function Ae(e, r, t = {}) {
       },
       signal: o.signal
     });
-    clearTimeout(s);
-    let d;
+    clearTimeout(l);
+    let g;
     try {
-      d = await m.json();
+      g = await m.json();
     } catch {
       return {
         success: !1,
@@ -1006,30 +1058,30 @@ async function Ae(e, r, t = {}) {
         message: "Máy chủ phản hồi dữ liệu không hợp lệ."
       };
     }
-    if (!m.ok || d.status === "error") {
-      const T = K(d);
+    if (!m.ok || g.status === "error") {
+      const p = W(g);
       return {
         success: !1,
-        error: T.code || ((c = d.error) == null ? void 0 : c.code) || "AUTH_SESSION_REJECTED",
-        code: T.code || ((h = d.error) == null ? void 0 : h.code) || "AUTH_SESSION_REJECTED",
-        rawCode: ((E = d.error) == null ? void 0 : E.code) || T.rawCode,
-        message: T.message || "Xác thực Turnstile không thành công hoặc bị máy chủ từ chối.",
+        error: p.code || ((c = g.error) == null ? void 0 : c.code) || "AUTH_SESSION_REJECTED",
+        code: p.code || ((h = g.error) == null ? void 0 : h.code) || "AUTH_SESSION_REJECTED",
+        rawCode: ((f = g.error) == null ? void 0 : f.code) || p.rawCode,
+        message: p.message || "Xác thực Turnstile không thành công hoặc bị máy chủ từ chối.",
         httpStatus: m.status
       };
     }
-    const f = _e(d);
-    return f.valid ? {
+    const d = Ne(g);
+    return d.valid ? {
       success: !0,
-      token: d.token,
-      exp: d.exp
+      token: g.token,
+      exp: g.exp
     } : {
       success: !1,
-      error: f.error,
-      code: f.error,
+      error: d.error,
+      code: d.error,
       message: "Phản hồi phiên xác thực từ máy chủ không đúng định dạng chuẩn."
     };
   } catch (m) {
-    return clearTimeout(s), a ? {
+    return clearTimeout(l), s ? {
       success: !1,
       error: "TIMEOUT",
       code: "TIMEOUT",
@@ -1049,26 +1101,26 @@ async function Ae(e, r, t = {}) {
 }
 console.log("[X Video Tools] Background Service Worker (ESM) đã khởi động.");
 chrome.runtime.onMessage.addListener((e, r, t) => {
-  var i, l, u;
+  var i, a, u;
   const n = (e == null ? void 0 : e.action) || (e == null ? void 0 : e.type);
   if (n === "FETCH_SYNDICATION" || n === "XVT_FETCH_SYNDICATION") {
     const o = ((i = e.payload) == null ? void 0 : i.tweetId) || e.tweetId;
-    return ee(o, e.options).then((a) => t(a)).catch((a) => t({
+    return re(o, e.options).then((s) => t(s)).catch((s) => t({
       success: !1,
       error: "INTERNAL_ERROR",
-      message: a.message || "Lỗi xử lý nội bộ Service Worker"
+      message: s.message || "Lỗi xử lý nội bộ Service Worker"
     })), !0;
   }
-  if (n === "OPEN_CDN" || n === "OPEN_TAB" || n === "XVT_OPEN_TAB" || n === O.OPEN_CDN) {
-    const o = ((l = e.payload) == null ? void 0 : l.url) || e.url;
-    return ne(o).then((a) => t(a)).catch((a) => t({
+  if (n === "OPEN_CDN" || n === "OPEN_TAB" || n === "XVT_OPEN_TAB" || n === C.OPEN_CDN) {
+    const o = ((a = e.payload) == null ? void 0 : a.url) || e.url;
+    return oe(o).then((s) => t(s)).catch((s) => t({
       success: !1,
       error: "INTERNAL_ERROR",
-      message: a.message || "Lỗi xử lý mở tab mới"
+      message: s.message || "Lỗi xử lý mở tab mới"
     })), !0;
   }
-  if (n === O.GET_SETTINGS || n === "GET_SETTINGS")
-    return V().then((o) => {
+  if (n === C.GET_SETTINGS || n === "GET_SETTINGS")
+    return x().then((o) => {
       t({
         success: !0,
         data: {
@@ -1085,21 +1137,21 @@ chrome.runtime.onMessage.addListener((e, r, t) => {
         message: o.message
       });
     }), !0;
-  if (n === O.TEST_CONNECTION || n === "TEST_CONNECTION" || n === "XVT_TEST_CONNECTION") {
-    const o = e.payload || e, a = o.apiUrl, s = o.apiKey || "";
-    return ge(a, s).then((c) => t(c)).catch((c) => t({
+  if (n === C.TEST_CONNECTION || n === "TEST_CONNECTION" || n === "XVT_TEST_CONNECTION") {
+    const o = e.payload || e, s = o.apiUrl, l = o.apiKey || "";
+    return Ee(s, l).then((c) => t(c)).catch((c) => t({
       healthy: !1,
       success: !1,
       error: "TEST_FAILED",
       message: c.message || "Lỗi khi kiểm tra kết nối"
     })), !0;
   }
-  if (n === O.VERIFY_SESSION || n === "VERIFY_SESSION") {
-    const o = e.payload || e, { instanceUrl: a, turnstileResponse: s } = o;
-    return Ae(a, s).then(async (c) => {
+  if (n === C.VERIFY_SESSION || n === "VERIFY_SESSION") {
+    const o = e.payload || e, { instanceUrl: s, turnstileResponse: l } = o;
+    return Oe(s, l).then(async (c) => {
       if (!c.success)
         return t(c);
-      await ie(a, c.token, c.exp), t({
+      await se(s, c.token, c.exp), t({
         success: !0,
         exp: c.exp,
         message: "Xác thực phiên làm việc thành công!"
@@ -1112,95 +1164,88 @@ chrome.runtime.onMessage.addListener((e, r, t) => {
       });
     }), !0;
   }
-  if (n === O.GET_SESSION_STATUS || n === "GET_SESSION_STATUS") {
-    const o = e.payload || e, a = (o == null ? void 0 : o.instanceUrl) || "";
-    return ae(a).then((s) => t({ success: !0, ...s })).catch((s) => t({ success: !1, error: "STATUS_ERROR", message: s.message })), !0;
+  if (n === C.GET_SESSION_STATUS || n === "GET_SESSION_STATUS") {
+    const o = e.payload || e, s = (o == null ? void 0 : o.instanceUrl) || "";
+    return le(s).then((l) => t({ success: !0, ...l })).catch((l) => t({ success: !1, error: "STATUS_ERROR", message: l.message })), !0;
   }
-  if (n === O.CLEAR_SESSION || n === "CLEAR_SESSION")
-    return x().then(() => t({ success: !0 })).catch((o) => t({ success: !1, error: "CLEAR_ERROR", message: o.message })), !0;
-  if (n === O.DOWNLOAD_VIDEO || n === O.COBALT_DOWNLOAD || n === "COBALT_DOWNLOAD" || n === "XVT_COBALT_DOWNLOAD") {
-    const o = e.payload || e, { tweetId: a, permalink: s, username: c, videoKey: h, correlationId: E = `req_${Date.now()}`, selectedUrl: _, mediaIndex: m, mediaFingerprint: d } = o, f = (u = r.tab) == null ? void 0 : u.id;
+  if (n === C.CLEAR_SESSION || n === "CLEAR_SESSION")
+    return K().then(() => t({ success: !0 })).catch((o) => t({ success: !1, error: "CLEAR_ERROR", message: o.message })), !0;
+  if (n === C.DOWNLOAD_VIDEO || n === C.COBALT_DOWNLOAD || n === "COBALT_DOWNLOAD" || n === "XVT_COBALT_DOWNLOAD") {
+    const o = e.payload || e, { tweetId: s, permalink: l, username: c, videoKey: h, correlationId: f = `req_${Date.now()}`, selectedUrl: _, mediaIndex: m, mediaFingerprint: g } = o, d = (u = r.tab) == null ? void 0 : u.id;
     return (async () => {
-      var T;
+      var p;
       try {
         if (_) {
-          const A = await M(h, {
+          const O = await V(h, {
             url: _,
-            tweetId: a,
+            tweetId: s,
             username: c,
-            correlationId: E,
-            tabId: f
+            correlationId: f,
+            tabId: d
           });
-          return t(A);
+          return t(O);
         }
-        const g = await V();
-        if (!g.cobaltUrl)
+        const E = await x();
+        if (!E.cobaltUrl)
           return t({
             success: !1,
             error: "UNCONFIGURED",
             message: "Chưa cài đặt Cobalt URL. Bấm vào icon tiện ích để thiết lập."
           });
-        const W = J(g.cobaltUrl);
-        if (W && ((T = chrome.permissions) != null && T.contains) && !await chrome.permissions.contains({ origins: [W] }))
+        const B = ee(E.cobaltUrl);
+        if (B && ((p = chrome.permissions) != null && p.contains) && !await chrome.permissions.contains({ origins: [B] }))
           return t({
             success: !1,
             error: "PERMISSION_REQUIRED",
             message: "Cần cấp quyền truy cập máy chủ Cobalt trong cài đặt tiện ích."
           });
-        const U = s || (a ? `https://x.com/i/status/${a}` : "");
-        if (!U)
+        const j = l || (s ? `https://x.com/i/status/${s}` : "");
+        if (!j)
           return t({
             success: !1,
             error: "MISSING_URL",
             message: "Thiếu đường dẫn bài viết cần tải."
           });
         let F = "";
-        g.apiKey || (F = await se(g.cobaltUrl) || "");
-        const p = await fe({
-          url: U,
-          apiUrl: g.cobaltUrl,
-          apiKey: g.apiKey,
+        E.apiKey || (F = await ce(E.cobaltUrl) || "");
+        const S = await me({
+          url: j,
+          apiUrl: E.cobaltUrl,
+          apiKey: E.apiKey,
           sessionToken: F,
-          videoQuality: g.videoQuality || "max"
+          videoQuality: E.videoQuality || "max"
         });
-        if (!p.success) {
-          console.error("[X Video Tools] Cobalt API request failed:", {
-            correlationId: E,
-            error: p.error,
-            code: p.code,
-            message: p.message,
-            targetUrl: U,
-            apiUrl: g.cobaltUrl,
-            details: p.details
-          });
-          const A = K(p.raw || p, g.cobaltUrl);
+        if (!S.success) {
+          const O = J(S.message || S.error || "Lỗi kết nối Cobalt");
+          console.warn(`[X Video Tools] Cobalt API request notice: ${O}`);
+          const R = W(S.raw || S, E.cobaltUrl);
           return t({
             success: !1,
-            error: A.code || p.error,
-            code: A.code || p.code,
-            rawCode: A.rawCode || p.code,
-            message: A.message || p.message || "Lỗi khi kết nối Cobalt API.",
-            retryAfter: p.retryAfter
+            error: R.code || S.error,
+            code: R.code || S.code,
+            rawCode: R.rawCode || S.code,
+            message: R.message || S.message || "Lỗi khi kết nối Cobalt API.",
+            retryAfter: S.retryAfter
           });
         }
-        const N = Te(p.raw || p);
+        const N = Te(S.raw || S);
         if (!N.success)
           return console.error("[X Video Tools] Cobalt response parsing failed:", {
-            correlationId: E,
+            correlationId: f,
             error: N.error,
             message: N.message
           }), t(N);
         if (N.type === "PICKER") {
-          const A = Ee(N.items, { mediaIndex: m, mediaFingerprint: d });
-          if (A && A.url) {
-            const Q = await M(h, {
-              url: A.url,
-              tweetId: a,
+          const O = ye(N.items, { mediaIndex: m, mediaFingerprint: g });
+          if (O && O.url) {
+            const R = await V(h, {
+              url: O.url,
+              tweetId: s,
               username: c,
-              correlationId: E,
-              tabId: f
+              correlationId: f,
+              tabId: d
             });
-            return t(Q);
+            return t(R);
           }
           return t({
             success: !0,
@@ -1208,26 +1253,26 @@ chrome.runtime.onMessage.addListener((e, r, t) => {
             type: "PICKER",
             items: N.items,
             totalItems: N.totalItems,
-            correlationId: E
+            correlationId: f
           });
         }
-        const q = await M(h, {
+        const Z = await V(h, {
           url: N.downloadUrl,
-          tweetId: a,
+          tweetId: s,
           username: c,
-          correlationId: E,
-          tabId: f
+          correlationId: f,
+          tabId: d
         });
-        t(q);
-      } catch (g) {
+        t(Z);
+      } catch (E) {
         console.error("[X Video Tools] Unhandled error in COBALT_DOWNLOAD:", {
-          correlationId: E,
-          error: g.message,
-          stack: g.stack
+          correlationId: f,
+          error: E.message,
+          stack: E.stack
         }), t({
           success: !1,
           error: "DOWNLOAD_ERROR",
-          message: g.message || "Lỗi không xác định trong quá trình tải video."
+          message: E.message || "Lỗi không xác định trong quá trình tải video."
         });
       }
     })(), !0;

@@ -3,6 +3,7 @@ import { getSettings, saveSettings } from '../shared/utils/storage.js';
 import { normalizeCobaltUrl, validateCobaltUrl, extractOriginPattern } from '../shared/utils/urlHelper.js';
 import { checkServerHealth } from '../background/clients/cobaltClient.js';
 import { AUTH_STATES } from '../shared/constants/index.js';
+import { formatErrorMessage } from '../shared/utils/errorHelper.js';
 
 /**
  * Sets up password show/hide toggle behavior on API Key input.
@@ -40,7 +41,7 @@ export function setStatusBadge(text, type = 'unconfigured') {
 
   indicator.className = 'status-indicator';
   indicator.classList.add(`status-${type}`);
-  textEl.textContent = text;
+  textEl.textContent = formatErrorMessage(text);
 }
 
 /**
@@ -53,9 +54,10 @@ export function showNotice(message, type = 'info') {
   const noticeEl = document.getElementById('popupNotice');
   if (!noticeEl) return;
 
+  const text = formatErrorMessage(message);
   noticeEl.className = 'popup-notice';
   noticeEl.classList.add(`notice-${type}`);
-  noticeEl.textContent = message;
+  noticeEl.textContent = text;
   noticeEl.style.display = 'block';
 }
 

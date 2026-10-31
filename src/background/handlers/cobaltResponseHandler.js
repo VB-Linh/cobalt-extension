@@ -1,6 +1,6 @@
-// src/background/handlers/cobaltResponseHandler.js
-
 export { matchPickerItem } from '../../shared/utils/mediaMatcher.js';
+export { formatErrorMessage } from '../../shared/utils/errorHelper.js';
+import { formatErrorMessage } from '../../shared/utils/errorHelper.js';
 
 export const COBALT_RESPONSE_TYPES = Object.freeze({
   REDIRECT: 'redirect',
@@ -72,11 +72,27 @@ export const COBALT_ERROR_MESSAGES = Object.freeze({
 export function classifyCobaltError(data, targetUrl = '') {
   let rawCode = '';
   let context = {};
+  let fallbackMessage = '';
 
   if (typeof data === 'string') {
-    rawCode = data;
+    rawCode = data.trim();
   } else if (data && typeof data === 'object') {
-    rawCode = data.code || data.error?.code || data.error || '';
+    if (typeof data.code === 'string') {
+      rawCode = data.code.trim();
+    } else if (typeof data.error?.code === 'string') {
+      rawCode = data.error.code.trim();
+    } else if (typeof data.error === 'string') {
+      rawCode = data.error.trim();
+    } else if (typeof data.rawCode === 'string') {
+      rawCode = data.rawCode.trim();
+    }
+
+    if (typeof data.message === 'string' && data.message.trim()) {
+      fallbackMessage = data.message.trim();
+    } else if (typeof data.error?.message === 'string' && data.error.message.trim()) {
+      fallbackMessage = data.error.message.trim();
+    }
+
     context = data.context || data.error?.context || {};
   }
 
@@ -87,12 +103,15 @@ export function classifyCobaltError(data, targetUrl = '') {
     effectiveUrl.includes('[::1]')
   );
 
+  const upperCode = typeof rawCode === 'string' ? rawCode.toUpperCase() : '';
+
   // Handle network reachability errors
   if (
-    rawCode === 'UNREACHABLE' ||
-    rawCode === 'SERVER_UNREACHABLE' ||
-    rawCode === 'LOCAL_OFFLINE' ||
-    rawCode === 'LOCAL_SERVICE_OFFLINE'
+    upperCode === 'UNREACHABLE' ||
+    upperCode === 'SERVER_UNREACHABLE' ||
+    upperCode === 'LOCAL_OFFLINE' ||
+    upperCode === 'LOCAL_SERVICE_OFFLINE' ||
+    rawCode === 'error.api.unreachable'
   ) {
     return {
       code: 'UNREACHABLE',
@@ -104,7 +123,11 @@ export function classifyCobaltError(data, targetUrl = '') {
   }
 
   // Handle timeout and abort
-  if (rawCode === 'API_TIMEOUT') {
+  if (
+    rawCode === 'API_TIMEOUT' ||
+    rawCode === 'timed_out' ||
+    rawCode === 'error.api.timed_out'
+  ) {
     return {
       code: 'API_TIMEOUT',
       rawCode,
@@ -112,7 +135,7 @@ export function classifyCobaltError(data, targetUrl = '') {
     };
   }
 
-  if (rawCode === 'ABORTED') {
+  if (rawCode === 'ABORTED' || rawCode === 'aborted') {
     return {
       code: 'ABORTED',
       rawCode,
@@ -176,13 +199,28 @@ export function classifyCobaltError(data, targetUrl = '') {
   }
 
   // Handle rate limits
-  if (rawCode === 'error.api.rate_exceeded' || rawCode === 'rate_exceeded') {
+  if (
+    rawCode === 'error.api.rate_exceeded' ||
+    rawCode === 'rate_exceeded' ||
+    rawCode === 'error.api.rate_limit' ||
+    rawCode === 'rate_limit' ||
+    upperCode === 'RATE_LIMIT'
+  ) {
     const limitSec = context.limit || 15;
     return {
       code: 'RATE_LIMIT',
       rawCode,
       retryAfter: Number(limitSec),
       message: `Đã vượt quá giới hạn tải. Vui lòng thử lại sau ${limitSec} giây.`,
+    };
+  }
+
+  // Handle server capacity
+  if (rawCode === 'capacity' || rawCode === 'error.api.capacity') {
+    return {
+      code: 'CAPACITY',
+      rawCode,
+      message: 'Máy chủ Cobalt hiện đang quá tải. Vui lòng thử lại sau ít giây.',
     };
   }
 
@@ -235,19 +273,19 @@ export function classifyCobaltError(data, targetUrl = '') {
     };
   }
 
-  // Fallback to dictionary or generic message
-  let template = COBALT_ERROR_MESSAGES[rawCode] || COBALT_ERROR_MESSAGES['error.api.generic'];
-  if (context.limit) {
-    template = template.replace('{limit}', String(context.limit));
+  // Fallback to dictionary or server message or generic message
+  let template = COBALT_ERROR_MESSAGES[rawCode] || fallbackMessage || COBALT_ERROR_MESSAGES['error.api.generic'];
+  if (context.limit && typeof template === 'string') {
+    template = template.replace(/\{\{\s*limit\s*\}\}|\{limit\}/g, String(context.limit));
   }
-  if (context.service) {
-    template = template.replace('{service}', String(context.service));
+  if (context.service && typeof template === 'string') {
+    template = template.replace(/\{\{\s*service\s*\}\}|\{service\}/g, String(context.service));
   }
 
   return {
     code: 'API_ERROR',
-    rawCode,
-    message: template,
+    rawCode: typeof rawCode === 'string' ? rawCode : '',
+    message: typeof template === 'string' ? template : formatErrorMessage(template),
   };
 }
 

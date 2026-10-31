@@ -144,7 +144,15 @@ export const TOOLBAR_STYLES = `
   cursor: pointer;
   border-radius: 9999px;
   line-height: 1;
+  pointer-events: auto;
   transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+/* Ensure inner icons and SVG elements do not steal pointer events from the button */
+.xvt-btn-icon,
+.xvt-btn svg,
+.xvt-btn path {
+  pointer-events: none;
 }
 
 .xvt-btn:focus-visible {

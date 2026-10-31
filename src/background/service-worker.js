@@ -9,6 +9,7 @@ import { handleCobaltResponse, classifyCobaltError, matchPickerItem } from './ha
 import { initiateDownload } from './downloads/downloadManager.js';
 import { requestSession } from './clients/sessionClient.js';
 import { saveSessionToken, getSessionToken, clearSessionToken, getSessionStatus } from './auth/jwtManager.js';
+import { formatErrorMessage, redactSensitiveText } from '../shared/utils/errorHelper.js';
 
 console.log('[X Video Tools] Background Service Worker (ESM) đã khởi động.');
 
@@ -207,15 +208,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
 
         if (!cobaltRes.success) {
-          console.error('[X Video Tools] Cobalt API request failed:', {
-            correlationId,
-            error: cobaltRes.error,
-            code: cobaltRes.code,
-            message: cobaltRes.message,
-            targetUrl,
-            apiUrl: settings.cobaltUrl,
-            details: cobaltRes.details,
-          });
+          const displayErr = formatErrorMessage(cobaltRes.message || cobaltRes.error || 'Lỗi kết nối Cobalt');
+          console.warn(`[X Video Tools] Cobalt API request notice: ${displayErr}`);
           const classified = classifyCobaltError(cobaltRes.raw || cobaltRes, settings.cobaltUrl);
           return sendResponse({
             success: false,

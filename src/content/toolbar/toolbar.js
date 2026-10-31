@@ -3,6 +3,7 @@ import { TOOLBAR_STYLES, ICONS } from './toolbarStyles.js';
 import { TOOLBAR_STATES, createToolbarStateManager } from './toolbarState.js';
 import { setupToolbarEvents } from './toolbarEvents.js';
 import { videoStateStore as defaultStateStore, getVideoKey } from '../state/videoState.js';
+import { formatErrorMessage } from '../../shared/utils/errorHelper.js';
 
 export const DISMISS_ANIMATION_DURATION_MS = 150;
 
@@ -132,6 +133,7 @@ export function createToolbar(videoElement, tweetInfo = {}, options = {}) {
   host.style.top = '10px';
   host.style.left = '10px';
   host.style.zIndex = '9999';
+  host.style.pointerEvents = 'auto';
 
   /**
    * Adjusts positioning to top-left corner of video.
@@ -167,12 +169,12 @@ export function createToolbar(videoElement, tweetInfo = {}, options = {}) {
     <div class="xvt-toolbar-pill" role="toolbar" aria-label="X Video Tools">
       <button class="xvt-btn xvt-btn-download" role="button" tabindex="0" aria-label="Tải video">
         <span class="xvt-btn-icon" aria-hidden="true">${ICONS.DOWNLOAD}</span>
-        <div class="xvt-tooltip" role="tooltip">Tải</div>
+        <span class="xvt-tooltip" role="tooltip">Tải</span>
       </button>
       <div class="xvt-divider" aria-hidden="true"></div>
       <button class="xvt-btn xvt-btn-cdn" role="button" tabindex="0" aria-label="Link">
         <span class="xvt-btn-icon" aria-hidden="true">${ICONS.CDN}</span>
-        <div class="xvt-tooltip" role="tooltip">Link</div>
+        <span class="xvt-tooltip" role="tooltip">Link</span>
       </button>
       <div class="xvt-divider" aria-hidden="true"></div>
       <button class="xvt-btn xvt-btn-dismiss" role="button" tabindex="0" aria-label="Ẩn trên video này">
@@ -265,7 +267,8 @@ export function createToolbar(videoElement, tweetInfo = {}, options = {}) {
       noticeTimer = null;
     }
 
-    noticeEl.textContent = message;
+    const cleanMessage = formatErrorMessage(message);
+    noticeEl.textContent = cleanMessage;
     container.classList.add('xvt-has-notice');
     noticeEl.classList.add('xvt-notice-visible');
 
@@ -292,22 +295,33 @@ export function createToolbar(videoElement, tweetInfo = {}, options = {}) {
 
   /**
    * Shows toolbar (transition to hovered state).
+   * Inhibited during active operations (PROCESSING, DOWNLOADING, AMBIGUOUS, PICKER).
    */
   function show() {
     if (stateManager.isDismissed()) return;
+    const cur = stateManager.getState();
+    if (
+      cur === TOOLBAR_STATES.PROCESSING ||
+      cur === TOOLBAR_STATES.DOWNLOADING ||
+      cur === TOOLBAR_STATES.AMBIGUOUS ||
+      cur === TOOLBAR_STATES.PICKER
+    ) {
+      return;
+    }
     stateManager.setState(TOOLBAR_STATES.HOVERED);
   }
 
   /**
    * Hides toolbar (transition to idle state).
-   * Inhibited during active feedback (AMBIGUOUS, PICKER, DOWNLOADING).
+   * Inhibited during active operations (AMBIGUOUS, PICKER, DOWNLOADING, PROCESSING).
    */
   function hide() {
     if (
       stateManager.isDismissed() ||
       stateManager.getState() === TOOLBAR_STATES.AMBIGUOUS ||
       stateManager.getState() === TOOLBAR_STATES.PICKER ||
-      stateManager.getState() === TOOLBAR_STATES.DOWNLOADING
+      stateManager.getState() === TOOLBAR_STATES.DOWNLOADING ||
+      stateManager.getState() === TOOLBAR_STATES.PROCESSING
     ) {
       return;
     }
