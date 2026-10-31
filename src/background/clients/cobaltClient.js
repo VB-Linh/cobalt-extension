@@ -256,11 +256,20 @@ export async function requestCobalt(options = {}) {
       throw abortError;
     }
 
+    const isLocalhost = Boolean(
+      apiUrl.includes('localhost') ||
+      apiUrl.includes('127.0.0.1') ||
+      apiUrl.includes('[::1]')
+    );
+
     return {
       success: false,
       error: 'UNREACHABLE',
-      message: 'Không thể kết nối đến máy chủ Cobalt. Kiểm tra URL hoặc kết nối mạng.',
+      message: isLocalhost
+        ? 'Không thể kết nối máy chủ Cobalt nội bộ (localhost:9000). Vui lòng khởi động scripts\\start-cobalt-windows.bat.'
+        : 'Không thể kết nối đến máy chủ Cobalt. Kiểm tra URL hoặc kết nối mạng.',
       details: err.message,
+      apiUrl,
     };
   }
 }
@@ -344,11 +353,19 @@ export async function checkServerHealth(apiUrl, apiKey = '', options = {}) {
       raw: data,
     };
   } catch (err) {
+    const isLocalhost = Boolean(
+      apiUrl.includes('localhost') ||
+      apiUrl.includes('127.0.0.1') ||
+      apiUrl.includes('[::1]')
+    );
     return {
       healthy: false,
       error: 'UNREACHABLE',
-      message: 'Không thể kết nối đến máy chủ Cobalt. Kiểm tra URL hoặc kết nối mạng.',
+      message: isLocalhost
+        ? 'Cobalt local chưa khởi động. Vui lòng chạy file scripts\\start-cobalt-windows.bat'
+        : 'Không thể kết nối đến máy chủ Cobalt. Kiểm tra URL hoặc kết nối mạng.',
       details: err.message,
+      apiUrl,
     };
   }
 }

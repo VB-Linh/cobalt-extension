@@ -76,6 +76,23 @@ export function buildFilename(tweetId, username = '', extension = 'mp4') {
 }
 
 /**
+ * Helper to safely broadcast download status events to a content script tab.
+ */
+function broadcastDownloadStatus(tabId, message) {
+  if (typeof chrome !== 'undefined' && typeof chrome.tabs?.sendMessage === 'function' && tabId) {
+    try {
+      chrome.tabs.sendMessage(tabId, message, () => {
+        if (chrome.runtime?.lastError) {
+          // Tab may have navigated or closed, ignore safely
+        }
+      });
+    } catch {
+      // Ignore tab messaging error gracefully
+    }
+  }
+}
+
+/**
  * Initializes the global chrome.downloads.onChanged listener if not yet registered.
  */
 function ensureDownloadListener() {
@@ -88,6 +105,10 @@ function ensureDownloadListener() {
     const task = trackedDownloadIds.get(downloadId);
     if (!task) return;
 
+    if (delta.filename && delta.filename.current) {
+      task.filename = delta.filename.current;
+    }
+
     if (delta.state) {
       const currentState = delta.state.current;
 
@@ -95,6 +116,14 @@ function ensureDownloadListener() {
         task.state = DOWNLOAD_STATES.COMPLETED;
         if (task.videoKey) activeVideoDownloads.delete(task.videoKey);
         trackedDownloadIds.delete(downloadId);
+
+        broadcastDownloadStatus(task.tabId, {
+          type: 'DOWNLOAD_STATUS_CHANGED',
+          downloadId,
+          videoKey: task.videoKey,
+          state: 'complete',
+          filename: task.filename,
+        });
 
         if (typeof task.onComplete === 'function') {
           task.onComplete({ downloadId, state: DOWNLOAD_STATES.COMPLETED });
@@ -111,6 +140,13 @@ function ensureDownloadListener() {
         trackedDownloadIds.delete(downloadId);
 
         if (isUserCancel) {
+          broadcastDownloadStatus(task.tabId, {
+            type: 'DOWNLOAD_STATUS_CHANGED',
+            downloadId,
+            videoKey: task.videoKey,
+            state: 'cancelled',
+          });
+
           if (typeof task.onCancel === 'function') {
             task.onCancel({ downloadId, state: DOWNLOAD_STATES.CANCELLED });
           }
@@ -118,7 +154,22 @@ function ensureDownloadListener() {
             task.resolve({ success: true, downloadId, state: DOWNLOAD_STATES.CANCELLED, cancelled: true });
           }
         } else {
+          console.error('[X Video Tools] Download interrupted:', {
+            downloadId,
+            videoKey: task.videoKey,
+            error: errorCurrent,
+          });
+
           const errorMsg = 'Quá trình tải video bị gián đoạn do lỗi kết nối mạng.';
+          broadcastDownloadStatus(task.tabId, {
+            type: 'DOWNLOAD_STATUS_CHANGED',
+            downloadId,
+            videoKey: task.videoKey,
+            state: 'interrupted',
+            error: errorCurrent,
+            message: errorMsg,
+          });
+
           if (typeof task.onError === 'function') {
             task.onError({ downloadId, error: errorCurrent, message: errorMsg });
           }
@@ -158,24 +209,26 @@ export async function startDownload(params = {}) {
     };
   }
 
-  // Build sanitized filename
+  const downloadOptions = {
+    url: params.url,
+    conflictAction: 'uniquify',
+    saveAs: params.saveAs !== undefined ? params.saveAs : false,
+  };
+
+  // Only pass filename if explicitly specified by caller.
+  // When omitted, Chrome relies on the server's native filename and preserves
+  // the user's last chosen directory in the Save As dialog.
   let filename = params.filename;
-  if (!filename) {
-    filename = generateFilename(params.tweetId, params.username, 'mp4');
-  } else {
+  if (filename && typeof filename === 'string') {
     filename = sanitizeFilenamePart(filename);
     if (!filename.endsWith('.mp4') && !filename.endsWith('.gif') && !filename.endsWith('.mp3')) {
       filename += '.mp4';
     }
+    downloadOptions.filename = filename;
   }
 
   try {
-    const downloadId = await chrome.downloads.download({
-      url: params.url,
-      filename,
-      conflictAction: 'uniquify',
-      saveAs: false,
-    });
+    const downloadId = await chrome.downloads.download(downloadOptions);
 
     return {
       success: true,
@@ -183,6 +236,12 @@ export async function startDownload(params = {}) {
       filename,
     };
   } catch (err) {
+    console.error('[X Video Tools] chrome.downloads.download failed:', {
+      error: err.message,
+      stack: err.stack,
+      url: params.url,
+      filename,
+    });
     return {
       success: false,
       error: 'DOWNLOAD_FAILED',
@@ -197,6 +256,8 @@ export async function startDownload(params = {}) {
  * @param {number} downloadId
  * @param {object} [callbacks]
  * @param {string} [callbacks.videoKey]
+ * @param {number} [callbacks.tabId]
+ * @param {string} [callbacks.filename]
  * @param {(res: object) => void} [callbacks.onComplete]
  * @param {(err: object) => void} [callbacks.onError]
  * @param {(res: object) => void} [callbacks.onCancel]
@@ -209,6 +270,8 @@ export function trackDownload(downloadId, callbacks = {}) {
     trackedDownloadIds.set(downloadId, {
       downloadId,
       videoKey: callbacks.videoKey,
+      tabId: callbacks.tabId,
+      filename: callbacks.filename,
       state: DOWNLOAD_STATES.IN_PROGRESS,
       onComplete: callbacks.onComplete,
       onError: callbacks.onError,
@@ -223,7 +286,7 @@ export function trackDownload(downloadId, callbacks = {}) {
  * High-level download initiator with anti-duplicate lock per video entity.
  * 
  * @param {string} videoKey - Canonical unique video key
- * @param {object} params - Download params { url, filename, tweetId, username, correlationId }
+ * @param {object} params - Download params { url, filename, tweetId, username, correlationId, tabId }
  * @returns {Promise<object>}
  */
 export async function initiateDownload(videoKey, params = {}) {
@@ -267,6 +330,8 @@ export async function initiateDownload(videoKey, params = {}) {
     // Attach tracking
     trackDownload(res.downloadId, {
       videoKey,
+      tabId: params.tabId,
+      filename: res.filename,
     }).catch(() => {
       // Handled by tracker
     });
@@ -278,6 +343,11 @@ export async function initiateDownload(videoKey, params = {}) {
       correlationId,
     };
   } catch (err) {
+    console.error('[X Video Tools] initiateDownload error:', {
+      videoKey,
+      error: err.message,
+      stack: err.stack,
+    });
     if (videoKey) activeVideoDownloads.delete(videoKey);
     return {
       success: false,

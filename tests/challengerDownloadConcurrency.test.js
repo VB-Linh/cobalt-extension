@@ -200,11 +200,13 @@ describe('Empirical Challenger: Phase 4 Download Manager & Concurrency Stress Su
           url: 'https://video.twimg.com/vidA.mp4',
           tweetId: '111',
           username: 'user_alpha',
+          filename: 'X_user_alpha_111.mp4',
         }),
         initiateDownload(videoKeyB, {
           url: 'https://video.twimg.com/vidB.mp4',
           tweetId: '222',
           username: 'user_beta',
+          filename: 'X_user_beta_222.mp4',
         }),
       ]);
 
@@ -696,15 +698,20 @@ describe('Empirical Challenger: Phase 4 Download Manager & Concurrency Stress Su
       simulatePointerEvent(downloadBtn, 'click');
       expect(controller.stateManager.getState()).toBe(TOOLBAR_STATES.DOWNLOADING);
 
-      // 2. Advance 850ms so toolbar enters SUCCESS state
-      vi.advanceTimersByTime(850);
-      expect(controller.stateManager.getState()).toBe(TOOLBAR_STATES.SUCCESS);
+      // 2. Download completes via message sync
+      chrome.runtime.onMessage.dispatch({
+        type: 'DOWNLOAD_STATUS_CHANGED',
+        downloadId: 6001,
+        state: 'complete',
+      });
+      expect([TOOLBAR_STATES.COMPLETED, TOOLBAR_STATES.SUCCESS]).toContain(controller.stateManager.getState());
 
-      // 3. User clicks Download again while in SUCCESS state
+      // 3. User clicks Download again while in SUCCESS / COMPLETED state
       simulatePointerEvent(downloadBtn, 'click');
 
-      // The background download manager rejected the duplicate
-      expect(bgCalls).toBe(2);
+      // The toolbar concurrency guard blocks clicks during SUCCESS / COMPLETED state, preventing invalid transition
+      expect(bgCalls).toBe(1);
+      expect([TOOLBAR_STATES.COMPLETED, TOOLBAR_STATES.SUCCESS]).toContain(controller.stateManager.getState());
 
       vi.useRealTimers();
     });

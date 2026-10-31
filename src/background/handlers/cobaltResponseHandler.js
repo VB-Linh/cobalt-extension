@@ -55,15 +55,19 @@ export const COBALT_ERROR_MESSAGES = Object.freeze({
   'error.api.content.video.live': 'Không hỗ trợ tải luồng phát trực tiếp (livestream).',
   'error.api.content.video.region': 'Video bị chặn tại khu vực địa lý của máy chủ Cobalt.',
   'error.api.generic': 'Đã xảy ra lỗi không xác định trên máy chủ Cobalt. Vui lòng thử lại sau.',
+  'UNREACHABLE': 'Không thể kết nối đến máy chủ Cobalt. Vui lòng kiểm tra lại URL hoặc mạng.',
+  'API_TIMEOUT': 'Hết thời gian chờ phản hồi từ máy chủ Cobalt. Vui lòng thử lại sau.',
+  'ABORTED': 'Yêu cầu tải đã bị hủy.',
 });
 
 /**
  * Classifies Cobalt error response into structured error details with Vietnamese message.
  * 
  * @param {object|string} data - Raw error response or error code string
+ * @param {string} [targetUrl=''] - Optional instance or target URL for local context
  * @returns {{ code: string, message: string, retryAfter?: number, rawCode?: string }}
  */
-export function classifyCobaltError(data) {
+export function classifyCobaltError(data, targetUrl = '') {
   let rawCode = '';
   let context = {};
 
@@ -72,6 +76,46 @@ export function classifyCobaltError(data) {
   } else if (data && typeof data === 'object') {
     rawCode = data.code || data.error?.code || data.error || '';
     context = data.context || data.error?.context || {};
+  }
+
+  const effectiveUrl = String(targetUrl || data?.apiUrl || data?.url || context?.url || '');
+  const isLocalhost = Boolean(
+    effectiveUrl.includes('localhost') ||
+    effectiveUrl.includes('127.0.0.1') ||
+    effectiveUrl.includes('[::1]')
+  );
+
+  // Handle network reachability errors
+  if (
+    rawCode === 'UNREACHABLE' ||
+    rawCode === 'SERVER_UNREACHABLE' ||
+    rawCode === 'LOCAL_OFFLINE' ||
+    rawCode === 'LOCAL_SERVICE_OFFLINE'
+  ) {
+    return {
+      code: 'UNREACHABLE',
+      rawCode,
+      message: isLocalhost
+        ? 'Không thể kết nối máy chủ Cobalt nội bộ (localhost:9000). Vui lòng khởi động scripts\\start-cobalt-windows.bat.'
+        : 'Không thể kết nối đến máy chủ Cobalt. Vui lòng kiểm tra lại URL hoặc mạng.',
+    };
+  }
+
+  // Handle timeout and abort
+  if (rawCode === 'API_TIMEOUT') {
+    return {
+      code: 'API_TIMEOUT',
+      rawCode,
+      message: 'Hết thời gian chờ phản hồi từ máy chủ Cobalt. Vui lòng thử lại sau.',
+    };
+  }
+
+  if (rawCode === 'ABORTED') {
+    return {
+      code: 'ABORTED',
+      rawCode,
+      message: 'Yêu cầu tải đã bị hủy.',
+    };
   }
 
   // Handle key authentication errors
@@ -209,13 +253,23 @@ export function classifyCobaltError(data) {
  * Classifies network exception errors (Failed to fetch, offline, DNS failure).
  * 
  * @param {Error|any} err
- * @returns {{ success: boolean, error: string, message: string }}
+ * @param {string} [targetUrl='']
+ * @returns {{ success: boolean, error: string, message: string, details?: string }}
  */
-export function classifyNetworkError(err) {
+export function classifyNetworkError(err, targetUrl = '') {
+  const effectiveUrl = String(targetUrl || err?.url || '');
+  const isLocalhost = Boolean(
+    effectiveUrl.includes('localhost') ||
+    effectiveUrl.includes('127.0.0.1') ||
+    effectiveUrl.includes('[::1]')
+  );
+
   return {
     success: false,
     error: 'UNREACHABLE',
-    message: 'Không thể kết nối đến máy chủ Cobalt. Kiểm tra URL hoặc kết nối mạng.',
+    message: isLocalhost
+      ? 'Không thể kết nối máy chủ Cobalt nội bộ (localhost:9000). Vui lòng khởi động scripts\\start-cobalt-windows.bat.'
+      : 'Không thể kết nối đến máy chủ Cobalt. Vui lòng kiểm tra lại URL hoặc mạng.',
     details: err?.message,
   };
 }

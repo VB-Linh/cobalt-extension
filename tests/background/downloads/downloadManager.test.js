@@ -39,6 +39,25 @@ describe('Group D: Download Manager Tests (Tests 26–34)', () => {
     expect(res.downloadId).toBe(1001);
   });
 
+  it('Test 26b: chrome.downloads.download invocation without filename preserves native server naming and last-used folder', async () => {
+    const downloadSpy = vi.spyOn(chrome.downloads, 'download').mockResolvedValue(1002);
+
+    const res = await startDownload({
+      url: 'https://cobalt.io/tunnel?id=native_test',
+    });
+
+    expect(downloadSpy).toHaveBeenCalledWith({
+      url: 'https://cobalt.io/tunnel?id=native_test',
+      conflictAction: 'uniquify',
+      saveAs: false,
+    });
+    // Ensure filename property was NOT included in options
+    expect(downloadSpy.mock.calls[0][0]).not.toHaveProperty('filename');
+
+    expect(res.success).toBe(true);
+    expect(res.downloadId).toBe(1002);
+  });
+
   it('Test 27: File naming convention: Username + Tweet ID (strips illegal filesystem characters)', () => {
     const filename1 = generateFilename({
       username: 'elonmusk',

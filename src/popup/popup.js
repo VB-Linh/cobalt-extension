@@ -267,7 +267,7 @@ export async function handleSaveInstance(url, apiKey = '', videoQuality = 'max')
     });
 
     showNotice('Đã lưu cấu hình thành công!', 'success');
-    setStatusBadge('Đã lưu cài đặt', 'connected');
+    setStatusBadge('Đã lưu cấu hình', 'saved');
     return { success: true, settings: saved };
   } catch (err) {
     showNotice(`Không thể lưu cài đặt: ${err.message}`, 'error');
@@ -304,7 +304,7 @@ if (typeof document !== 'undefined') {
       }
 
       if (settings.cobaltUrl) {
-        setStatusBadge('Đã lưu URL', 'connected');
+        setStatusBadge('Đã lưu cấu hình', 'saved');
         if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
           try {
             chrome.runtime.sendMessage({
@@ -350,6 +350,12 @@ if (typeof document !== 'undefined') {
         const res = await testConnection(url, key);
         btnTest.disabled = false;
 
+        const isLocalhost = Boolean(
+          url.includes('localhost') ||
+          url.includes('127.0.0.1') ||
+          url.includes('[::1]')
+        );
+
         if (res.healthy) {
           const ver = res.version ? ` (v${res.version})` : '';
           const quality = qualitySelect?.value || 'max';
@@ -367,12 +373,17 @@ if (typeof document !== 'undefined') {
           } else {
             const section = document.getElementById('turnstileSection');
             if (section) section.style.display = 'none';
-            setStatusBadge(`Đã kết nối${ver}`, 'connected');
+            setStatusBadge(`Đang hoạt động${ver}`, 'connected');
             showNotice(`Kết nối máy chủ Cobalt thành công${ver} và đã lưu cấu hình!`, 'success');
           }
         } else {
-          setStatusBadge('Không thể kết nối', 'error');
-          showNotice(res.message || 'Không thể kết nối tới máy chủ Cobalt.', 'error');
+          if (isLocalhost) {
+            setStatusBadge('Cobalt chưa chạy (port 9000)', 'error');
+            showNotice('Cobalt local chưa khởi động. Vui lòng chạy file scripts\\start-cobalt-windows.bat', 'error');
+          } else {
+            setStatusBadge('Không thể kết nối', 'error');
+            showNotice(res.message || 'Không thể kết nối đến máy chủ Cobalt. Vui lòng kiểm tra lại URL hoặc mạng.', 'error');
+          }
         }
       });
     }

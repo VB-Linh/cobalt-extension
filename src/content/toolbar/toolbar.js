@@ -198,10 +198,6 @@ export function createToolbar(videoElement, tweetInfo = {}, options = {}) {
       if (cdnIconEl) cdnIconEl.innerHTML = ICONS.CDN;
       if (cdnBtn) cdnBtn.removeAttribute('aria-busy');
     }
-
-    if (currentState === TOOLBAR_STATES.IDLE) {
-      hideNotice();
-    }
   });
 
   /**
@@ -218,6 +214,7 @@ export function createToolbar(videoElement, tweetInfo = {}, options = {}) {
     }
 
     noticeEl.textContent = message;
+    container.classList.add('xvt-has-notice');
     noticeEl.classList.add('xvt-notice-visible');
 
     noticeTimer = setTimeout(() => {
@@ -232,6 +229,9 @@ export function createToolbar(videoElement, tweetInfo = {}, options = {}) {
     if (noticeTimer !== null) {
       clearTimeout(noticeTimer);
       noticeTimer = null;
+    }
+    if (container) {
+      container.classList.remove('xvt-has-notice');
     }
     if (noticeEl) {
       noticeEl.classList.remove('xvt-notice-visible');

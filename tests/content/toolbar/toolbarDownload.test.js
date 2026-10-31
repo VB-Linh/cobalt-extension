@@ -80,9 +80,13 @@ describe('Group E: Toolbar Integration Tests (Tests 35–42)', () => {
     capturedCallback({ success: true, downloadId: 2001 });
     expect(controller.stateManager.getState()).toBe(TOOLBAR_STATES.DOWNLOADING);
 
-    // 3. Advance timer for completion
-    vi.advanceTimersByTime(900);
-    expect(controller.stateManager.getState()).toBe(TOOLBAR_STATES.SUCCESS);
+    // 3. Background signals download completion via runtime message
+    chrome.runtime.onMessage.dispatch({
+      type: 'DOWNLOAD_STATUS_CHANGED',
+      downloadId: 2001,
+      state: 'complete',
+    });
+    expect([TOOLBAR_STATES.COMPLETED, TOOLBAR_STATES.SUCCESS]).toContain(controller.stateManager.getState());
   });
 
   it('Test 37: State machine transition: Error state & Retry on error response', () => {

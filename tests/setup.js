@@ -5,6 +5,7 @@ let localStore = {};
 let syncStore = {};
 let sessionStore = {};
 const downloadListeners = new Set();
+const messageListeners = new Set();
 
 globalThis.chrome = {
   storage: {
@@ -82,9 +83,18 @@ globalThis.chrome = {
   runtime: {
     sendMessage: vi.fn(() => Promise.resolve()),
     onMessage: {
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      hasListener: vi.fn(),
+      addListener: vi.fn((fn) => messageListeners.add(fn)),
+      removeListener: vi.fn((fn) => messageListeners.delete(fn)),
+      hasListener: vi.fn((fn) => messageListeners.has(fn)),
+      dispatch: (msg, sender = {}, sendResponse = () => {}) => {
+        for (const fn of messageListeners) {
+          try {
+            fn(msg, sender, sendResponse);
+          } catch {
+            // ignore
+          }
+        }
+      },
     },
     getURL: vi.fn((p) => `chrome-extension://mock-extension-id/${p}`),
     lastError: null,
@@ -106,6 +116,10 @@ globalThis.chrome = {
   },
   tabs: {
     create: vi.fn((opts) => Promise.resolve({ id: 1, ...opts })),
+    sendMessage: vi.fn((tabId, msg, cb) => {
+      if (typeof cb === 'function') cb();
+      return Promise.resolve();
+    }),
   },
   permissions: {
     request: vi.fn(() => Promise.resolve(true)),

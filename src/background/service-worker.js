@@ -143,7 +143,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     action === 'XVT_COBALT_DOWNLOAD'
   ) {
     const payload = message.payload || message;
-    const { tweetId, permalink, username, videoKey, correlationId, selectedUrl } = payload;
+    const { tweetId, permalink, username, videoKey, correlationId = `req_${Date.now()}`, selectedUrl } = payload;
+    const tabId = sender.tab?.id;
 
     (async () => {
       try {
@@ -154,6 +155,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             tweetId,
             username,
             correlationId,
+            tabId,
           });
           return sendResponse(downloadRes);
         }
@@ -205,7 +207,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
 
         if (!cobaltRes.success) {
-          const classified = classifyCobaltError(cobaltRes.raw || cobaltRes);
+          console.error('[X Video Tools] Cobalt API request failed:', {
+            correlationId,
+            error: cobaltRes.error,
+            code: cobaltRes.code,
+            message: cobaltRes.message,
+            targetUrl,
+            apiUrl: settings.cobaltUrl,
+            details: cobaltRes.details,
+          });
+          const classified = classifyCobaltError(cobaltRes.raw || cobaltRes, settings.cobaltUrl);
           return sendResponse({
             success: false,
             error: classified.code || cobaltRes.error,
@@ -219,6 +230,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // Classify response
         const handled = handleCobaltResponse(cobaltRes.raw || cobaltRes);
         if (!handled.success) {
+          console.error('[X Video Tools] Cobalt response parsing failed:', {
+            correlationId,
+            error: handled.error,
+            message: handled.message,
+          });
           return sendResponse(handled);
         }
 
@@ -235,16 +251,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         // Download stream ready (redirect or tunnel)
+        // Omit custom filename override so Chrome preserves last-used directory in Save As dialog
         const downloadRes = await initiateDownload(videoKey, {
           url: handled.downloadUrl,
-          filename: handled.filename,
           tweetId,
           username,
           correlationId,
+          tabId,
         });
 
         sendResponse(downloadRes);
       } catch (err) {
+        console.error('[X Video Tools] Unhandled error in COBALT_DOWNLOAD:', {
+          correlationId,
+          error: err.message,
+          stack: err.stack,
+        });
         sendResponse({
           success: false,
           error: 'DOWNLOAD_ERROR',

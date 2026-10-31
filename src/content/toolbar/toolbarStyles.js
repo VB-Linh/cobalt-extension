@@ -220,6 +220,15 @@ export const TOOLBAR_STYLES = `
   visibility: visible;
 }
 
+/* Avoid visual clash between tooltip and notice banner */
+.xvt-has-notice .xvt-tooltip,
+.xvt-toolbar-container:has(.xvt-notice-visible) .xvt-tooltip {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 /* Feedback Notice Banner */
 .xvt-notice {
   position: absolute;
