@@ -77,12 +77,22 @@ export const TOOLBAR_STYLES = `
 .xvt-toolbar-container.xvt-hovered .xvt-toolbar-vertical,
 .xvt-toolbar-container.xvt-processing .xvt-toolbar-pill,
 .xvt-toolbar-container.xvt-processing .xvt-toolbar-vertical,
+.xvt-toolbar-container.xvt-downloading .xvt-toolbar-pill,
+.xvt-toolbar-container.xvt-downloading .xvt-toolbar-vertical,
+.xvt-toolbar-container.xvt-completed .xvt-toolbar-pill,
+.xvt-toolbar-container.xvt-completed .xvt-toolbar-vertical,
 .xvt-toolbar-container.xvt-ambiguous .xvt-toolbar-pill,
 .xvt-toolbar-container.xvt-ambiguous .xvt-toolbar-vertical,
+.xvt-toolbar-container.xvt-picker .xvt-toolbar-pill,
+.xvt-toolbar-container.xvt-picker .xvt-toolbar-vertical,
 .xvt-toolbar-container.xvt-success .xvt-toolbar-pill,
 .xvt-toolbar-container.xvt-success .xvt-toolbar-vertical,
 .xvt-toolbar-container.xvt-error .xvt-toolbar-pill,
 .xvt-toolbar-container.xvt-error .xvt-toolbar-vertical,
+.xvt-toolbar-container.xvt-interrupted .xvt-toolbar-pill,
+.xvt-toolbar-container.xvt-interrupted .xvt-toolbar-vertical,
+.xvt-toolbar-container.xvt-cancelled .xvt-toolbar-pill,
+.xvt-toolbar-container.xvt-cancelled .xvt-toolbar-vertical,
 .xvt-toolbar-container.xvt-unconfigured .xvt-toolbar-pill,
 .xvt-toolbar-container.xvt-unconfigured .xvt-toolbar-vertical {
   opacity: 1;
@@ -90,11 +100,17 @@ export const TOOLBAR_STYLES = `
   pointer-events: auto;
   transform: translateY(0);
 }
+
 .xvt-toolbar-container.xvt-hovered,
 .xvt-toolbar-container.xvt-processing,
+.xvt-toolbar-container.xvt-downloading,
+.xvt-toolbar-container.xvt-completed,
 .xvt-toolbar-container.xvt-ambiguous,
+.xvt-toolbar-container.xvt-picker,
 .xvt-toolbar-container.xvt-success,
 .xvt-toolbar-container.xvt-error,
+.xvt-toolbar-container.xvt-interrupted,
+.xvt-toolbar-container.xvt-cancelled,
 .xvt-toolbar-container.xvt-unconfigured {
   pointer-events: auto;
 }

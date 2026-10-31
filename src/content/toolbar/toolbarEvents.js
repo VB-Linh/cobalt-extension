@@ -2,6 +2,8 @@
 import { TOOLBAR_STATES } from './toolbarState.js';
 import { resolveCdnForVideo } from '../cdn/cdnResolver.js';
 import { renderMediaPicker } from '../cdn/mediaPicker.js';
+import { isCobaltConfigured, getSettings } from '../../shared/utils/storage.js';
+import { getVideoKey } from '../state/videoState.js';
 
 export const GRACE_PERIOD_MS = 300;
 export const NOTICE_DURATION_MS = 2500;
@@ -48,11 +50,14 @@ export function setupToolbarEvents({
   function scheduleGracefulHide() {
     cancelHideTimer();
     hideTimer = setTimeout(() => {
+      const currentState = stateManager.getState();
       if (
         !isHoveringVideo &&
         !isHoveringToolbar &&
         !stateManager.isDismissed() &&
-        stateManager.getState() !== TOOLBAR_STATES.AMBIGUOUS
+        currentState !== TOOLBAR_STATES.AMBIGUOUS &&
+        currentState !== TOOLBAR_STATES.PICKER &&
+        currentState !== TOOLBAR_STATES.DOWNLOADING
       ) {
         toolbarController.hide();
       }
@@ -134,6 +139,12 @@ export function setupToolbarEvents({
 
     if (stateManager.isDismissed()) return;
 
+    // Concurrency guard: Ignore clicks if download or processing is already in flight
+    const currentState = stateManager.getState();
+    if (currentState === TOOLBAR_STATES.PROCESSING || currentState === TOOLBAR_STATES.DOWNLOADING) {
+      return;
+    }
+
     // Debounce rapid spam clicks
     const now = Date.now();
     if (now - lastActionClickTime < CLICK_DEBOUNCE_MS) {
@@ -141,10 +152,125 @@ export function setupToolbarEvents({
     }
     lastActionClickTime = now;
 
-    // In Phase 2: Action buttons operate in unconfigured state without network calls or fake success
-    const message = 'Chưa cài đặt Cobalt URL. Bấm vào icon tiện ích để thiết lập.';
-    toolbarController.showNotice(message, NOTICE_DURATION_MS);
-    stateManager.setState(TOOLBAR_STATES.UNCONFIGURED, { message });
+    // Check configuration synchronously
+    const isConfigured = Boolean(
+      options.enableDownload === true ||
+      options.cobaltUrl ||
+      isCobaltConfigured()
+    );
+
+    if (!isConfigured) {
+      const message = 'Chưa cài đặt Cobalt URL. Bấm vào icon tiện ích để thiết lập.';
+      toolbarController.showNotice(message, NOTICE_DURATION_MS);
+      stateManager.setState(TOOLBAR_STATES.UNCONFIGURED, { message });
+      return;
+    }
+
+    // When configured, transition to PROCESSING and send COBALT_DOWNLOAD
+    stateManager.setState(TOOLBAR_STATES.PROCESSING, { action: 'download' });
+
+    // Robust tweetId and permalink resolution with fallback to DOM attributes and URL
+    const effectiveTweetId =
+      tweetInfo.tweetId ||
+      video?.dataset?.xvtTweetId ||
+      video?.closest?.('article')?.id?.replace('tweet-', '') ||
+      (typeof window !== 'undefined' && window.location?.href?.match(/\/status\/(\d+)/)?.[1]) ||
+      null;
+
+    const effectivePermalink =
+      tweetInfo.permalink ||
+      (effectiveTweetId ? `https://x.com/i/status/${effectiveTweetId}` : null) ||
+      (typeof window !== 'undefined' && window.location?.href?.includes('/status/') ? window.location.href : null);
+
+    const videoKey =
+      tweetInfo.videoKey ||
+      (effectiveTweetId ? getVideoKey(effectiveTweetId, tweetInfo.mediaIndex, tweetInfo.mediaFingerprint || video) : null);
+
+    const correlationId = `${videoKey || effectiveTweetId || 'vid'}_${Date.now()}`;
+    const basePayload = {
+      tweetId: effectiveTweetId,
+      permalink: effectivePermalink,
+      username: tweetInfo.username,
+      mediaIndex: tweetInfo.mediaIndex,
+      videoKey,
+      correlationId,
+    };
+
+    function sendDownloadRequest(extraPayload = {}) {
+      try {
+        chrome.runtime.sendMessage({
+          action: 'COBALT_DOWNLOAD',
+          payload: { ...basePayload, ...extraPayload },
+        }, (res) => {
+          if (!res) {
+            stateManager.setState(TOOLBAR_STATES.ERROR, { action: 'download' });
+            toolbarController.showNotice('Không nhận được phản hồi từ tiện ích.', NOTICE_DURATION_MS);
+            return;
+          }
+
+          // Handle Picker response
+          if (res.status === 'picker' || res.type === 'PICKER') {
+            stateManager.setState(TOOLBAR_STATES.PICKER, { items: res.items || res.picker });
+            renderMediaPicker(toolbarController.shadowRoot, res.items || res.picker, {
+              onSelect: (selectedMedia) => {
+                stateManager.setState(TOOLBAR_STATES.PROCESSING, { action: 'download' });
+                sendDownloadRequest({ selectedUrl: selectedMedia.url });
+              },
+              onCancel: () => {
+                stateManager.setState(
+                  isHoveringVideo || isHoveringToolbar ? TOOLBAR_STATES.HOVERED : TOOLBAR_STATES.IDLE
+                );
+              },
+            });
+            return;
+          }
+
+          // Handle success download initiation
+          if (res.success) {
+            stateManager.setState(TOOLBAR_STATES.DOWNLOADING, { action: 'download', downloadId: res.downloadId });
+            toolbarController.showNotice('Đang tải video...', NOTICE_DURATION_MS);
+
+            setTimeout(() => {
+              if (stateManager.getState() === TOOLBAR_STATES.DOWNLOADING) {
+                stateManager.setState(TOOLBAR_STATES.SUCCESS, { action: 'download' });
+                toolbarController.showNotice('Đã bắt đầu tải video', NOTICE_DURATION_MS);
+
+                setTimeout(() => {
+                  if (stateManager.getState() === TOOLBAR_STATES.SUCCESS) {
+                    stateManager.setState(
+                      isHoveringVideo || isHoveringToolbar ? TOOLBAR_STATES.HOVERED : TOOLBAR_STATES.IDLE
+                    );
+                  }
+                }, NOTICE_DURATION_MS);
+              }
+            }, 800);
+          } else {
+            // Error handling
+            if (res.error === 'UNCONFIGURED') {
+              const msg = res.message || 'Chưa cài đặt Cobalt URL. Bấm vào icon tiện ích để thiết lập.';
+              toolbarController.showNotice(msg, NOTICE_DURATION_MS);
+              stateManager.setState(TOOLBAR_STATES.UNCONFIGURED, { message: msg });
+            } else {
+              stateManager.setState(TOOLBAR_STATES.ERROR, { action: 'download', error: res.error });
+              toolbarController.showNotice(res.message || 'Lỗi khi tải video', NOTICE_DURATION_MS);
+
+              setTimeout(() => {
+                if (stateManager.getState() === TOOLBAR_STATES.ERROR) {
+                  stateManager.setState(
+                    isHoveringVideo || isHoveringToolbar ? TOOLBAR_STATES.HOVERED : TOOLBAR_STATES.IDLE
+                  );
+                }
+              }, NOTICE_DURATION_MS);
+            }
+          }
+        });
+      } catch (err) {
+        stateManager.setState(TOOLBAR_STATES.ERROR, { action: 'download', error: err.message });
+        toolbarController.showNotice(err.message || 'Lỗi kết nối nền', NOTICE_DURATION_MS);
+      }
+    }
+
+    sendDownloadRequest();
   }
 
   function handleCdnClick(event) {

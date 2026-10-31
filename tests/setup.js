@@ -3,6 +3,8 @@ import { vi } from 'vitest';
 
 let localStore = {};
 let syncStore = {};
+let sessionStore = {};
+const downloadListeners = new Set();
 
 globalThis.chrome = {
   storage: {
@@ -42,6 +44,35 @@ globalThis.chrome = {
         return Promise.resolve();
       }),
     },
+    session: {
+      get: vi.fn((keys) => {
+        if (!keys) return Promise.resolve({ ...sessionStore });
+        if (typeof keys === 'string') return Promise.resolve({ [keys]: sessionStore[keys] });
+        if (Array.isArray(keys)) {
+          const res = {};
+          for (const k of keys) res[k] = sessionStore[k];
+          return Promise.resolve(res);
+        }
+        const res = { ...keys };
+        for (const k in keys) {
+          if (k in sessionStore) res[k] = sessionStore[k];
+        }
+        return Promise.resolve(res);
+      }),
+      set: vi.fn((items) => {
+        Object.assign(sessionStore, items);
+        return Promise.resolve();
+      }),
+      remove: vi.fn((keys) => {
+        const arr = Array.isArray(keys) ? keys : [keys];
+        for (const k of arr) delete sessionStore[k];
+        return Promise.resolve();
+      }),
+      clear: vi.fn(() => {
+        sessionStore = {};
+        return Promise.resolve();
+      }),
+    },
     onChanged: {
       addListener: vi.fn(),
       removeListener: vi.fn(),
@@ -60,6 +91,18 @@ globalThis.chrome = {
   },
   downloads: {
     download: vi.fn(() => Promise.resolve(1001)),
+    search: vi.fn(() => Promise.resolve([])),
+    cancel: vi.fn(() => Promise.resolve()),
+    onChanged: {
+      addListener: vi.fn((fn) => downloadListeners.add(fn)),
+      removeListener: vi.fn((fn) => downloadListeners.delete(fn)),
+      hasListener: vi.fn((fn) => downloadListeners.has(fn)),
+      dispatch: (delta) => {
+        for (const fn of downloadListeners) {
+          fn(delta);
+        }
+      },
+    },
   },
   tabs: {
     create: vi.fn((opts) => Promise.resolve({ id: 1, ...opts })),
@@ -67,6 +110,7 @@ globalThis.chrome = {
   permissions: {
     request: vi.fn(() => Promise.resolve(true)),
     contains: vi.fn(() => Promise.resolve(true)),
+    remove: vi.fn(() => Promise.resolve(true)),
   },
   action: {
     setBadgeText: vi.fn(() => Promise.resolve()),

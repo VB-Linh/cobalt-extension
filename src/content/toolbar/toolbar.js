@@ -150,9 +150,14 @@ export function createToolbar(videoElement, tweetInfo = {}, options = {}) {
       'xvt-idle',
       'xvt-hovered',
       'xvt-processing',
+      'xvt-downloading',
+      'xvt-completed',
       'xvt-ambiguous',
+      'xvt-picker',
       'xvt-success',
       'xvt-error',
+      'xvt-interrupted',
+      'xvt-cancelled',
       'xvt-unconfigured',
       'xvt-dismissing'
     );
@@ -163,7 +168,7 @@ export function createToolbar(videoElement, tweetInfo = {}, options = {}) {
     const isCdnAction = payload?.action === 'cdn';
 
     // Update icons / buttons based on state
-    if (currentState === TOOLBAR_STATES.PROCESSING) {
+    if (currentState === TOOLBAR_STATES.PROCESSING || currentState === TOOLBAR_STATES.DOWNLOADING) {
       if (isCdnAction) {
         if (cdnIconEl) cdnIconEl.innerHTML = ICONS.SPINNER;
         if (cdnBtn) cdnBtn.setAttribute('aria-busy', 'true');
@@ -171,7 +176,7 @@ export function createToolbar(videoElement, tweetInfo = {}, options = {}) {
         if (downloadIconEl) downloadIconEl.innerHTML = ICONS.SPINNER;
         if (downloadBtn) downloadBtn.setAttribute('aria-busy', 'true');
       }
-    } else if (currentState === TOOLBAR_STATES.SUCCESS) {
+    } else if (currentState === TOOLBAR_STATES.SUCCESS || currentState === TOOLBAR_STATES.COMPLETED) {
       if (isCdnAction) {
         if (cdnIconEl) cdnIconEl.innerHTML = ICONS.CHECKMARK;
         if (cdnBtn) cdnBtn.removeAttribute('aria-busy');
@@ -179,7 +184,7 @@ export function createToolbar(videoElement, tweetInfo = {}, options = {}) {
         if (downloadIconEl) downloadIconEl.innerHTML = ICONS.CHECKMARK;
         if (downloadBtn) downloadBtn.removeAttribute('aria-busy');
       }
-    } else if (currentState === TOOLBAR_STATES.ERROR) {
+    } else if (currentState === TOOLBAR_STATES.ERROR || currentState === TOOLBAR_STATES.INTERRUPTED) {
       if (isCdnAction) {
         if (cdnIconEl) cdnIconEl.innerHTML = ICONS.ERROR;
         if (cdnBtn) cdnBtn.removeAttribute('aria-busy');
@@ -243,9 +248,17 @@ export function createToolbar(videoElement, tweetInfo = {}, options = {}) {
 
   /**
    * Hides toolbar (transition to idle state).
+   * Inhibited during active feedback (AMBIGUOUS, PICKER, DOWNLOADING).
    */
   function hide() {
-    if (stateManager.isDismissed() || stateManager.getState() === TOOLBAR_STATES.AMBIGUOUS) return;
+    if (
+      stateManager.isDismissed() ||
+      stateManager.getState() === TOOLBAR_STATES.AMBIGUOUS ||
+      stateManager.getState() === TOOLBAR_STATES.PICKER ||
+      stateManager.getState() === TOOLBAR_STATES.DOWNLOADING
+    ) {
+      return;
+    }
     stateManager.setState(TOOLBAR_STATES.IDLE);
   }
 

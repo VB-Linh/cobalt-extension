@@ -106,8 +106,8 @@ async function buildExtension() {
     },
   });
 
-  // 5. Đồng bộ manifest.json vào dist/
-  console.log('📄 [4/4] Sao chép manifest.json và icons...');
+  // 5. Đồng bộ manifest.json và sandbox.html vào dist/
+  console.log('📄 [4/4] Sao chép manifest.json, sandbox.html và icons...');
   const manifestSrc = resolve(rootDir, 'manifest.json');
   if (fs.existsSync(manifestSrc)) {
     try {
@@ -118,6 +118,11 @@ async function buildExtension() {
     fs.copyFileSync(manifestSrc, resolve(distDir, 'manifest.json'));
   } else {
     throw new Error('Không tìm thấy tệp manifest.json tại thư mục gốc!');
+  }
+
+  const sandboxSrc = resolve(rootDir, 'src/popup/sandbox.html');
+  if (fs.existsSync(sandboxSrc)) {
+    fs.copyFileSync(sandboxSrc, resolve(distDir, 'sandbox.html'));
   }
 
   // 6. Đồng bộ thư mục icons vào dist/icons/

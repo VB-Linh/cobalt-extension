@@ -8,6 +8,7 @@
     "dev": "node scripts/build.js --watch",
     "test": "vitest run",
     "test:watch": "vitest",
+    "cobalt": "cmd /c scripts\\start-cobalt-windows.bat",
     "generate-icons": "node scripts/generate-icons.js"
   },
   "keywords": [

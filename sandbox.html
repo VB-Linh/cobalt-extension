@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Turnstile Verification Sandbox</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+      min-height: 65px;
+    }
+    #cf-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+    }
+  </style>
+  <script>
+    let widgetId = null;
+
+    window.onloadTurnstileCallback = function() {
+      window.parent.postMessage({ type: 'TURNSTILE_READY' }, '*');
+    };
+
+    window.addEventListener('message', function(event) {
+      const data = event.data;
+      if (!data) return;
+
+      if (data.action === 'RENDER_TURNSTILE') {
+        const sitekey = data.sitekey;
+        if (!sitekey) return;
+
+        const container = document.getElementById('cf-container');
+        if (container) {
+          container.innerHTML = '';
+        }
+
+        if (window.turnstile) {
+          try {
+            widgetId = window.turnstile.render('#cf-container', {
+              sitekey: sitekey,
+              theme: 'dark',
+              callback: function(token) {
+                window.parent.postMessage({ type: 'TURNSTILE_SUCCESS', token: token }, '*');
+              },
+              'error-callback': function(errorCode) {
+                window.parent.postMessage({ type: 'TURNSTILE_ERROR', errorCode: errorCode }, '*');
+              },
+              'expired-callback': function() {
+                window.parent.postMessage({ type: 'TURNSTILE_EXPIRED' }, '*');
+              }
+            });
+          } catch (err) {
+            window.parent.postMessage({ type: 'TURNSTILE_ERROR', errorCode: err.message }, '*');
+          }
+        }
+      }
+
+      if (data.action === 'RESET_TURNSTILE' && widgetId !== null && window.turnstile) {
+        try {
+          window.turnstile.reset(widgetId);
+        } catch {
+          // ignore
+        }
+      }
+    });
+  </script>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstileCallback" async defer></script>
+</head>
+<body>
+  <div id="cf-container"></div>
+</body>
+</html>

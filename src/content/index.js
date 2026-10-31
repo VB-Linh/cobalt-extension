@@ -1,4 +1,5 @@
 import { STORAGE_KEYS } from '../shared/constants/index.js';
+import { getSettings } from '../shared/utils/storage.js';
 import { detectVideos, findTweetContainer } from './detection/index.js';
 import { extractTweetInfo } from './extraction/index.js';
 import { videoStateStore } from './state/index.js';
@@ -7,6 +8,9 @@ import { attachToolbar, detachToolbar } from './toolbar/index.js';
 
 console.log('[X Video Tools] Content Script khởi tạo thành công trên', typeof window !== 'undefined' ? window.location.hostname : 'unknown');
 console.log('[X Video Tools] Storage key tham chiếu:', STORAGE_KEYS.SETTINGS);
+
+// Pre-load Cobalt instance configuration into cache
+getSettings().catch(() => {});
 
 /**
  * Handles detection of an eligible video element.

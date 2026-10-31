@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>X Video Tools</title>
+  <title>X Video Tools - Cài Đặt</title>
   <script type="module" crossorigin src="./popup.js"></script>
   <link rel="stylesheet" crossorigin href="./assets/popup.css">
 </head>
@@ -16,14 +16,97 @@
         <span class="popup-badge">v0.1.0</span>
       </div>
     </header>
+
     <main class="popup-body">
-      <div class="status-card">
-        <span class="status-indicator"></span>
-        <span class="status-text">Phase 0: Project Initialized</span>
+      <!-- Status Card -->
+      <div class="status-card" id="statusCard">
+        <span class="status-indicator status-unconfigured" id="statusIndicator"></span>
+        <span class="status-text" id="statusText">Chưa cấu hình</span>
       </div>
-      <p class="popup-description">
-        Tiện ích tải video X (Twitter) trực tiếp qua Cobalt API &amp; CDN Twimg.
-      </p>
+
+      <!-- Settings Form -->
+      <form id="settingsForm" class="settings-form" novalidate>
+        <!-- API URL Field -->
+        <div class="form-group">
+          <label for="cobaltUrl" class="form-label">Cobalt Instance URL</label>
+          <input
+            type="url"
+            id="cobaltUrl"
+            class="form-input"
+            placeholder="https://cobalt.example.com"
+            autocomplete="off"
+            spellcheck="false"
+            required
+          >
+          <span class="form-hint">Địa chỉ máy chủ Cobalt v11 API của bạn.</span>
+        </div>
+
+        <!-- API Key Field -->
+        <div class="form-group">
+          <label for="apiKey" class="form-label">API Key (Tùy chọn)</label>
+          <div class="input-with-button">
+            <input
+              type="password"
+              id="apiKey"
+              class="form-input"
+              placeholder="UUIDv4 API Key"
+              autocomplete="off"
+              spellcheck="false"
+            >
+            <button
+              type="button"
+              id="toggleApiKey"
+              class="btn-icon"
+              aria-label="Hiện hoặc ẩn API Key"
+              title="Hiện/Ẩn API Key"
+            >
+              👁
+            </button>
+          </div>
+          <span class="form-hint">Chỉ cần thiết nếu máy chủ của bạn yêu cầu xác thực.</span>
+        </div>
+
+        <!-- Video Quality Field -->
+        <div class="form-group">
+          <label for="videoQuality" class="form-label">Chất lượng tải mặc định</label>
+          <select id="videoQuality" class="form-select">
+            <option value="max" selected>Tối đa (max / best bitrate)</option>
+            <option value="2160">4K (2160p)</option>
+            <option value="1440">2K (1440p)</option>
+            <option value="1080">Full HD (1080p)</option>
+            <option value="720">HD (720p)</option>
+            <option value="480">SD (480p)</option>
+          </select>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="form-actions">
+          <button type="button" id="btnTest" class="btn btn-secondary">
+            Kiểm tra kết nối
+          </button>
+          <button type="submit" id="btnSave" class="btn btn-primary">
+            Lưu cài đặt
+          </button>
+        </div>
+      </form>
+
+      <!-- Turnstile Session Authentication Section -->
+      <section id="turnstileSection" class="turnstile-section" style="display: none;" aria-label="Xác thực Turnstile">
+        <div class="turnstile-header">
+          <span class="turnstile-title">Xác thực phiên (Turnstile)</span>
+          <span id="turnstileBadge" class="turnstile-badge badge-waiting">Chờ xác thực</span>
+        </div>
+        <div id="turnstileNotice" class="turnstile-notice"></div>
+        <div id="turnstileContainer" class="turnstile-container">
+          <iframe id="turnstileFrame" src="sandbox.html" class="turnstile-frame" title="Khung xác thực Cloudflare Turnstile"></iframe>
+        </div>
+        <button type="button" id="btnReauth" class="btn btn-secondary btn-reauth" style="display: none;">
+          🔄 Xác thực lại
+        </button>
+      </section>
+
+      <!-- Feedback / Notice message -->
+      <div id="popupNotice" class="popup-notice" aria-live="polite"></div>
     </main>
   </div>
 </body>
